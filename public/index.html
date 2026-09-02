@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>GameNight — Join</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="stylesheet" href="/css/game.css" />
+  </head>
+  <body>
+    <div id="banner" class="banner hidden"></div>
+
+    <!-- Join form -->
+    <main id="screen-join" class="screen">
+      <div class="brand">
+        <h1 class="brand__title">GameNight</h1>
+        <p class="brand__sub">Movie Trivia</p>
+      </div>
+
+      <form id="join-form" class="card stack" autocomplete="off">
+        <div>
+          <label for="code">Game PIN</label>
+          <input
+            id="code"
+            class="code-input"
+            type="text"
+            inputmode="latin"
+            maxlength="4"
+            autocapitalize="characters"
+            spellcheck="false"
+            placeholder="ABCD"
+            required
+          />
+        </div>
+        <div>
+          <label for="name">Your name</label>
+          <input id="name" type="text" maxlength="16" placeholder="Nickname" required />
+        </div>
+        <button id="join-btn" class="btn" type="submit">Join game</button>
+        <p id="join-error" class="error"></p>
+      </form>
+
+      <p class="muted center" style="font-size: 0.85rem">
+        Running the game? <a href="/host.html" style="color: var(--gold)">Open the host screen</a>
+      </p>
+    </main>
+
+    <!-- Waiting room -->
+    <main id="screen-wait" class="screen hidden">
+      <div class="brand">
+        <p class="brand__sub">You're in</p>
+        <h1 class="brand__title" id="wait-name">—</h1>
+      </div>
+      <div class="card center stack">
+        <p class="pulse" style="font-size: 1.1rem">Waiting for the host to start…</p>
+        <p class="muted" style="font-size: 0.9rem">
+          Game PIN <strong id="wait-code">—</strong> · <span id="wait-count">1</span> in the lobby
+        </p>
+      </div>
+      <button id="leave-btn" class="btn btn--ghost btn--sm">Leave game</button>
+    </main>
+
+    <!-- Get ready: prompt is up, answers not open yet -->
+    <main id="screen-ready" class="screen hidden">
+      <p class="brand__sub" id="ready-progress">—</p>
+      <h2 class="ready__prompt" id="ready-prompt">—</h2>
+      <p class="muted pulse" id="ready-hint">Look at the big screen…</p>
+    </main>
+
+    <!-- Answer pads -->
+    <main id="screen-answer" class="play hidden">
+      <header class="play__bar">
+        <span id="answer-progress">—</span>
+        <span id="answer-clock" class="play__clock">—</span>
+      </header>
+      <div class="play__prompt" id="answer-prompt"></div>
+      <div class="pads" id="answer-pads"></div>
+      <p class="play__status" id="answer-status"></p>
+    </main>
+
+    <!-- Reveal -->
+    <main id="screen-result" class="screen hidden result">
+      <div class="result__mark" id="result-mark">—</div>
+      <h2 class="result__title" id="result-title">—</h2>
+      <p class="result__detail" id="result-detail"></p>
+      <div class="result__gain" id="result-gain"></div>
+      <p class="muted" id="result-rank"></p>
+    </main>
+
+    <!-- Scoreboard -->
+    <main id="screen-board" class="screen hidden">
+      <div class="card center stack">
+        <p class="brand__sub">You are</p>
+        <div class="rank" id="board-rank">—</div>
+        <p id="board-score" class="muted">—</p>
+        <p id="board-ahead" class="muted"></p>
+      </div>
+    </main>
+
+    <!-- Final -->
+    <main id="screen-final" class="screen hidden">
+      <div class="card center stack">
+        <p class="brand__sub" id="final-blurb">Game over</p>
+        <div class="rank" id="final-rank">—</div>
+        <p id="final-score" class="muted">—</p>
+        <ol class="scorelist" id="final-podium"></ol>
+      </div>
+    </main>
+
+    <!-- Terminal state: kicked / closed -->
+    <main id="screen-over" class="screen hidden">
+      <div class="card center stack">
+        <h2 id="over-title">Game over</h2>
+        <p class="muted" id="over-text"></p>
+        <button class="btn" onclick="location.reload()">Back to start</button>
+      </div>
+    </main>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/common.js"></script>
+    <script src="/js/shapes.js"></script>
+    <script src="/js/pads.js"></script>
+    <script src="/js/join.js"></script>
+  </body>
+</html>

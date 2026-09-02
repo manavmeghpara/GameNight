@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GameNight — Host</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="stylesheet" href="/css/game.css" />
+  </head>
+  <body>
+    <div id="banner" class="banner hidden"></div>
+
+    <!-- Idle: no room yet -->
+    <main id="screen-idle" class="screen">
+      <div class="brand">
+        <h1 class="brand__title">GameNight</h1>
+        <p class="brand__sub">Host Screen</p>
+      </div>
+      <div class="card stack">
+        <button id="create-btn" class="btn">Create a game</button>
+        <a class="btn btn--ghost" href="/admin.html" style="text-decoration: none">Quiz builder</a>
+        <p id="idle-error" class="error"></p>
+      </div>
+    </main>
+
+    <!-- Lobby: room open, players joining -->
+    <main id="screen-lobby" class="screen hidden">
+      <div class="lobby">
+        <div class="joinbar">
+          <div class="joinbar__block">
+            <div class="joinbar__label">Go to</div>
+            <div class="joinbar__url" id="join-url">—</div>
+          </div>
+          <div class="joinbar__divider"></div>
+          <div class="joinbar__block">
+            <div class="joinbar__label">Game PIN</div>
+            <div class="joinbar__code" id="room-code">—</div>
+          </div>
+        </div>
+
+        <div class="roster">
+          <div class="roster__head">
+            <h2 style="font-size: 1.2rem">Players</h2>
+            <span class="muted" id="player-count">0 joined</span>
+          </div>
+          <div class="roster__empty" id="roster-empty">Waiting for players to join…</div>
+          <div class="roster__list" id="roster-list"></div>
+        </div>
+
+        <div class="picker">
+          <label for="quiz-select">Quiz to play</label>
+          <select id="quiz-select"></select>
+          <a class="btn btn--ghost btn--sm" href="/admin.html" style="text-decoration: none">
+            Quiz builder
+          </a>
+        </div>
+
+        <div class="actions">
+          <button id="start-btn" class="btn" disabled>Start game</button>
+          <button id="close-btn" class="btn btn--ghost">Close game</button>
+        </div>
+        <p id="lobby-error" class="error"></p>
+      </div>
+    </main>
+
+    <!-- ==================== Question stage ==================== -->
+    <main id="screen-game" class="stage hidden">
+      <header class="stage__bar">
+        <span class="stage__progress" id="q-progress">—</span>
+        <span class="stage__prompt-slot">
+          <h2 class="stage__prompt" id="q-prompt">—</h2>
+        </span>
+        <span class="stage__meta">
+          <span class="tag" id="q-points">—</span>
+          <span class="stage__answered" id="q-answered"></span>
+        </span>
+      </header>
+
+      <div class="stage__main">
+        <div class="stage__media" id="q-media"></div>
+        <div class="stage__timer" id="q-timer">
+          <svg viewBox="0 0 120 120" class="ring">
+            <circle class="ring__track" cx="60" cy="60" r="52" />
+            <circle class="ring__fill" id="ring-fill" cx="60" cy="60" r="52" />
+          </svg>
+          <span class="ring__label" id="q-seconds">—</span>
+        </div>
+      </div>
+
+      <div class="pads pads--host" id="q-options"></div>
+
+      <footer class="stage__foot">
+        <button id="advance-btn" class="btn">Next</button>
+        <button id="reset-btn" class="btn btn--ghost btn--sm">End game</button>
+      </footer>
+    </main>
+
+    <!-- ==================== Scoreboard ==================== -->
+    <main id="screen-board" class="screen hidden">
+      <div class="board">
+        <h2 class="board__title" id="board-title">Scoreboard</h2>
+        <ol class="scorelist scorelist--big" id="board-list"></ol>
+        <div class="actions">
+          <button id="board-next" class="btn">Next question</button>
+          <button id="board-end" class="btn btn--ghost btn--sm">End game</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- ==================== Podium ==================== -->
+    <main id="screen-podium" class="screen hidden">
+      <h2 class="brand__title" style="font-size: 2.4rem">Final Results</h2>
+      <div class="podium" id="podium"></div>
+      <ol class="scorelist" id="podium-rest" style="max-width: 520px"></ol>
+      <div class="actions">
+        <button id="podium-again" class="btn">Back to lobby</button>
+        <button id="podium-close" class="btn btn--ghost btn--sm">Close game</button>
+      </div>
+    </main>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/common.js"></script>
+    <script src="/js/shapes.js"></script>
+    <script src="/js/pads.js"></script>
+    <script src="/js/stage.js"></script>
+    <script src="/js/host.js"></script>
+  </body>
+</html>

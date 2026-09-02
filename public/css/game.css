@@ -1,0 +1,608 @@
+/* ---------------------------------------------------------------------------
+   Play screens. The host stage is built for a TV across the room; the player
+   screens are built for a thumb on a phone.
+--------------------------------------------------------------------------- */
+
+/* ===========================================================================
+   Host: the question stage
+   =========================================================================== */
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: 100vh;
+  height: 100dvh;
+  padding: 18px 24px 20px;
+}
+
+.stage__bar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.stage__progress {
+  flex: 0 0 auto;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.stage__prompt-slot {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+
+.stage__prompt {
+  font-size: clamp(1.3rem, 3vw, 2.4rem);
+  font-weight: 800;
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+.stage__meta {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+}
+
+.stage__answered {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.stage__main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+}
+
+.stage__media {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stage__media:empty {
+  display: none;
+}
+
+.stage__media img,
+.stage__media video {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.stage__foot {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+}
+
+.stage__foot .btn {
+  width: auto;
+  min-width: 160px;
+}
+
+/* --- countdown ring ----------------------------------------------------- */
+
+.stage__timer {
+  position: relative;
+  flex: 0 0 auto;
+  width: clamp(90px, 12vw, 150px);
+  height: clamp(90px, 12vw, 150px);
+  display: grid;
+  place-items: center;
+}
+
+.stage__timer.hidden {
+  display: none !important;
+}
+
+.ring {
+  position: absolute;
+  inset: 0;
+  transform: rotate(-90deg);
+}
+
+.ring__track,
+.ring__fill {
+  fill: none;
+  stroke-width: 10;
+}
+
+.ring__track {
+  stroke: var(--surface-2);
+}
+
+.ring__fill {
+  stroke: var(--gold);
+  stroke-linecap: round;
+  /* 2 * pi * r, r = 52 */
+  stroke-dasharray: 326.7;
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 0.2s linear, stroke 0.3s;
+}
+
+.ring__fill--low {
+  stroke: var(--a1);
+}
+
+.ring__label {
+  position: relative;
+  font-size: clamp(1.8rem, 4vw, 3rem);
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- audio-only visual -------------------------------------------------- */
+
+.eq {
+  display: flex;
+  align-items: flex-end;
+  gap: 7px;
+  height: clamp(80px, 22vh, 200px);
+}
+
+.eq__bar {
+  width: clamp(10px, 2vw, 20px);
+  background: linear-gradient(180deg, var(--gold), var(--gold-deep));
+  border-radius: 6px;
+  animation: eq 900ms ease-in-out infinite alternate;
+}
+
+.eq--paused .eq__bar {
+  animation-play-state: paused;
+}
+
+@keyframes eq {
+  from {
+    height: 14%;
+  }
+  to {
+    height: 100%;
+  }
+}
+
+.media-note {
+  margin-top: 14px;
+  font-size: 0.9rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* Browsers can block autoplay; this is the escape hatch. */
+.tap-to-play {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  padding: 26px 32px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1a1206;
+  background: linear-gradient(180deg, var(--gold), var(--gold-deep));
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+/* ===========================================================================
+   Answer pads — shared shape, different sizes per surface
+   =========================================================================== */
+
+.pads {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+}
+
+/* 2 or 3 options get one row; more wrap into a comfortable grid. */
+.pads--n2,
+.pads--n3 {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.pads--n4,
+.pads--n5,
+.pads--n6,
+.pads--n7,
+.pads--n8 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.pad {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  font-family: inherit;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #fff;
+  text-align: left;
+  border: none;
+  border-radius: 12px;
+  transition: opacity 0.3s, transform 0.15s, box-shadow 0.2s;
+}
+
+.pad__glyph {
+  flex: 0 0 auto;
+  font-size: 1.25rem;
+}
+
+.pad__text {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.pad__tally {
+  flex: 0 0 auto;
+  padding: 3px 12px;
+  font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 999px;
+}
+
+/* Reveal states */
+.pad--dim {
+  opacity: 0.25;
+  transform: scale(0.97);
+}
+
+.pad--right {
+  box-shadow: 0 0 0 4px #fff, 0 0 34px rgba(255, 255, 255, 0.4);
+  animation: padPop 0.45s cubic-bezier(0.2, 1.5, 0.4, 1);
+}
+
+@keyframes padPop {
+  0% {
+    transform: scale(1);
+  }
+  55% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Host pads sit under the media, so keep them compact. */
+.pads--host {
+  flex: 0 0 auto;
+}
+
+.pads--host .pad {
+  padding: 14px 16px;
+  font-size: clamp(0.95rem, 1.5vw, 1.35rem);
+}
+
+.pads--host:empty {
+  display: none;
+}
+
+/* ===========================================================================
+   Player: answering
+   =========================================================================== */
+
+.play {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 14px;
+}
+
+.play__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.play__clock {
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.play__clock--low {
+  color: #ff8b95;
+}
+
+.play__prompt {
+  padding: 10px 4px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.play .pads {
+  flex: 1;
+  align-content: stretch;
+}
+
+.play .pad {
+  min-height: 76px;
+  cursor: pointer;
+}
+
+.play .pad:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.play .pad:disabled {
+  cursor: default;
+}
+
+.pad--chosen {
+  box-shadow: 0 0 0 4px #fff;
+}
+
+.play__status {
+  min-height: 1.4em;
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-align: center;
+  color: var(--gold);
+}
+
+/* --- get ready ---------------------------------------------------------- */
+
+.ready__prompt {
+  max-width: 520px;
+  font-size: clamp(1.3rem, 5vw, 2rem);
+  font-weight: 800;
+  line-height: 1.25;
+  text-align: center;
+}
+
+/* --- result ------------------------------------------------------------- */
+
+.result {
+  gap: 12px;
+}
+
+.result--right {
+  background: radial-gradient(900px 600px at 50% 0%, rgba(31, 168, 100, 0.35), transparent 65%);
+}
+
+.result--wrong {
+  background: radial-gradient(900px 600px at 50% 0%, rgba(232, 67, 79, 0.32), transparent 65%);
+}
+
+.result__mark {
+  width: 108px;
+  height: 108px;
+  display: grid;
+  place-items: center;
+  font-size: 3.4rem;
+  border-radius: 50%;
+  animation: pop 0.35s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+
+.result--right .result__mark {
+  background: var(--a4);
+}
+
+.result--wrong .result__mark {
+  background: var(--a1);
+}
+
+.result__title {
+  font-size: clamp(1.6rem, 7vw, 2.4rem);
+  font-weight: 900;
+  text-align: center;
+}
+
+.result__detail {
+  max-width: 420px;
+  margin: 0;
+  font-size: 1.05rem;
+  text-align: center;
+  color: var(--muted);
+}
+
+.result__gain {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--gold);
+}
+
+/* --- rank --------------------------------------------------------------- */
+
+.rank {
+  font-size: clamp(3rem, 16vw, 5rem);
+  font-weight: 900;
+  line-height: 1;
+  color: var(--gold);
+  text-shadow: 0 0 30px rgba(255, 201, 74, 0.4);
+}
+
+/* ===========================================================================
+   Scoreboard and podium (host)
+   =========================================================================== */
+
+.board {
+  width: 100%;
+  max-width: 720px;
+}
+
+.board__title {
+  margin-bottom: 18px;
+  font-size: clamp(1.6rem, 4vw, 2.4rem);
+  text-align: center;
+}
+
+.scorelist--big li {
+  padding: 15px 18px;
+  font-size: clamp(1rem, 2.2vw, 1.4rem);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin-bottom: 8px;
+  animation: slideIn 0.35s backwards;
+}
+
+.scorelist--big li:nth-child(1) { animation-delay: 0.05s; }
+.scorelist--big li:nth-child(2) { animation-delay: 0.1s; }
+.scorelist--big li:nth-child(3) { animation-delay: 0.15s; }
+.scorelist--big li:nth-child(4) { animation-delay: 0.2s; }
+.scorelist--big li:nth-child(5) { animation-delay: 0.25s; }
+.scorelist--big li:nth-child(6) { animation-delay: 0.3s; }
+.scorelist--big li:nth-child(7) { animation-delay: 0.35s; }
+.scorelist--big li:nth-child(8) { animation-delay: 0.4s; }
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.move {
+  flex: 0 0 auto;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.move--up {
+  color: #4ade80;
+}
+
+.move--down {
+  color: #ff8b95;
+}
+
+.move--same {
+  color: var(--muted);
+}
+
+/* --- podium ------------------------------------------------------------- */
+
+.podium {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 14px;
+  width: 100%;
+  max-width: 620px;
+  margin: 10px 0 6px;
+}
+
+.podium__slot {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.podium__name {
+  font-size: clamp(0.95rem, 2.2vw, 1.25rem);
+  font-weight: 800;
+  text-align: center;
+  word-break: break-word;
+}
+
+.podium__score {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.podium__block {
+  width: 100%;
+  display: grid;
+  place-items: center;
+  font-size: 2rem;
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+  border: 1px solid var(--line);
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+  animation: rise 0.6s cubic-bezier(0.2, 1.1, 0.4, 1) backwards;
+}
+
+.podium__slot--1 .podium__block {
+  height: 180px;
+  background: linear-gradient(180deg, var(--gold), var(--gold-deep));
+  animation-delay: 0.5s;
+}
+
+.podium__slot--2 .podium__block {
+  height: 128px;
+  animation-delay: 0.25s;
+}
+
+.podium__slot--3 .podium__block {
+  height: 92px;
+  animation-delay: 0s;
+}
+
+@keyframes rise {
+  from {
+    transform: scaleY(0);
+    transform-origin: bottom;
+  }
+  to {
+    transform: scaleY(1);
+    transform-origin: bottom;
+  }
+}
+
+/* ===========================================================================
+   Narrow / short screens
+   =========================================================================== */
+
+@media (max-width: 760px) {
+  .stage__bar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .stage__main {
+    flex-direction: column;
+  }
+
+  .stage__timer {
+    width: 84px;
+    height: 84px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "gamenight",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Kahoot-style movie trivia with image, audio and video questions",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node test/pages.test.mjs && node test/screens.test.mjs && node test/lobby.test.mjs && node test/builder.test.mjs && node test/game.test.mjs"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "multer": "^2.3.0",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.1",
+    "socket.io-client": "^4.8.3"
+  }
+}

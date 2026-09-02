@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GameNight — Quiz Builder</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="stylesheet" href="/css/admin.css" />
+  </head>
+  <body class="admin">
+    <!-- ==================== Library ==================== -->
+    <main id="screen-library" class="library">
+      <header class="library__head">
+        <div>
+          <h1 class="brand__title" style="font-size: 2.2rem">Quiz Builder</h1>
+          <p class="brand__sub">GameNight · Movie Trivia</p>
+        </div>
+        <div class="library__actions">
+          <a class="btn btn--ghost btn--sm" href="/host.html">Host screen</a>
+          <button id="new-quiz-btn" class="btn btn--sm">+ New quiz</button>
+        </div>
+      </header>
+
+      <p id="library-error" class="error"></p>
+      <div id="library-empty" class="roster__empty hidden">
+        No quizzes yet. Create one to get started.
+      </div>
+      <div id="library-list" class="quiz-grid"></div>
+    </main>
+
+    <!-- ==================== Editor ==================== -->
+    <main id="screen-editor" class="editor hidden">
+      <header class="editor__top">
+        <button id="back-btn" class="btn btn--ghost btn--sm" type="button">← Library</button>
+        <input
+          id="quiz-title"
+          class="editor__title"
+          type="text"
+          maxlength="80"
+          placeholder="Quiz title"
+        />
+        <span id="save-state" class="save-state">Saved</span>
+        <button id="validate-btn" class="btn btn--ghost btn--sm" type="button">Check quiz</button>
+      </header>
+
+      <div class="editor__body">
+        <!-- Question list -->
+        <aside class="qlist">
+          <div id="qlist-items" class="qlist__items"></div>
+          <button id="add-question-btn" class="btn btn--sm qlist__add" type="button">
+            + Add question
+          </button>
+        </aside>
+
+        <!-- Question editor -->
+        <section id="qedit" class="qedit">
+          <input
+            id="q-prompt"
+            class="qedit__prompt"
+            type="text"
+            maxlength="300"
+            placeholder="Ask your question…"
+          />
+
+          <!-- Media -->
+          <div class="media">
+            <div id="media-empty" class="media__drop">
+              <input id="media-file" type="file" accept="image/*,audio/*,video/*" hidden />
+              <p class="media__drop-title">Drop an image, audio clip or video here</p>
+              <p class="muted media__drop-hint">or click to browse · <span id="media-limit">—</span></p>
+              <div id="media-progress" class="media__progress hidden">
+                <div id="media-bar" class="media__bar"></div>
+              </div>
+            </div>
+
+            <div id="media-present" class="media__present hidden">
+              <div class="media__stage" id="media-stage"></div>
+              <div class="media__meta">
+                <div>
+                  <span id="media-kind" class="tag">—</span>
+                  <span id="media-name" class="muted"></span>
+                </div>
+                <button id="media-remove" class="btn btn--ghost btn--sm" type="button">
+                  Remove media
+                </button>
+              </div>
+              <div id="clip-row" class="clip hidden">
+                <label class="clip__label">Play from</label>
+                <input id="clip-start" class="clip__input" type="text" inputmode="decimal" placeholder="0:00" />
+                <label class="clip__label">to</label>
+                <input id="clip-end" class="clip__input" type="text" inputmode="decimal" placeholder="end" />
+                <button id="clip-preview" class="btn btn--ghost btn--sm" type="button">
+                  ▶ Preview clip
+                </button>
+                <label id="hide-video-row" class="clip__check hidden">
+                  <input id="hide-video" type="checkbox" />
+                  Audio only (hide the picture)
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Settings -->
+          <div class="settings">
+            <div class="settings__field">
+              <label for="q-time">Time limit</label>
+              <select id="q-time"></select>
+            </div>
+            <div class="settings__field">
+              <label for="q-points">Points</label>
+              <select id="q-points"></select>
+            </div>
+          </div>
+
+          <!-- Options -->
+          <div class="options">
+            <div class="options__head">
+              <label style="margin: 0">Answer options</label>
+              <span class="muted options__hint">Click the circle to mark the correct answer</span>
+            </div>
+            <div id="options-list" class="options__list"></div>
+            <button id="add-option-btn" class="btn btn--ghost btn--sm" type="button">
+              + Add option
+            </button>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- Validation report -->
+    <div id="report" class="modal hidden">
+      <div class="modal__card">
+        <h2 id="report-title">Quiz check</h2>
+        <ul id="report-list" class="report__list"></ul>
+        <button id="report-close" class="btn" type="button">Close</button>
+      </div>
+    </div>
+
+    <script src="/js/common.js"></script>
+    <script src="/js/shapes.js"></script>
+    <script src="/js/admin.js"></script>
+  </body>
+</html>
