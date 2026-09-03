@@ -246,7 +246,7 @@ async function send(message) {
     transcript.push({ role: 'error', text: message });
   } finally {
     setBusy(false);
-    save();
+    saveChat();
     $('chat-input').focus();
   }
 }
@@ -294,7 +294,9 @@ $('chat-clear').addEventListener('click', () => {
 // Persistence — per tab, capped so a long chat cannot fill storage
 // ---------------------------------------------------------------------------
 
-function save() {
+/* Named for the panel, not just `save`: these scripts share one global scope
+   with admin.js, and a plain `save` here would replace the builder's autosave. */
+function saveChat() {
   store.set(CHAT_KEY, {
     provider,
     transcript: transcript.slice(-30),
@@ -302,7 +304,7 @@ function save() {
   });
 }
 
-function restore() {
+function restoreChat() {
   const saved = store.get(CHAT_KEY);
   if (!saved) return;
   transcript = Array.isArray(saved.transcript) ? saved.transcript : [];
@@ -380,7 +382,7 @@ function codeSpan(text) {
 // ---------------------------------------------------------------------------
 
 (async function start() {
-  restore();
+  restoreChat();
   renderTranscript();
   setBusy(false);
 
