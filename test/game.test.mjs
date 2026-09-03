@@ -482,12 +482,16 @@ check('reveal names every correct answer',
 check('tallies count picks, not players',
   JSON.stringify(mr.tallies) === '[3,1,1,0]', JSON.stringify(mr.tallies));
 
+// Scores here are speed-scaled against a real 5s clock, so allow for the few
+// milliseconds of latency between answers-open and the answer landing.
+const near = (actual, expected) => Math.abs(actual - expected) <= expected * 0.02;
+
 check('full marks reads as correct', pr.correct === true && pr.partial === false, JSON.stringify(pr));
-check('full marks scores the whole question', pr.gained === 1000, String(pr.gained));
+check('full marks scores the whole question', near(pr.gained, 1000), String(pr.gained));
 check('full marks advances the streak', pr.streak === 1, String(pr.streak));
 
 check('half the answers reads as partial', par.correct === false && par.partial === true, JSON.stringify(par));
-check('half the answers scores half', par.gained === 500, String(par.gained));
+check('half the answers scores half', near(par.gained, 500), String(par.gained));
 check('partial credit does not advance the streak', par.streak === 0, String(par.streak));
 
 check('one right and one wrong scores zero', mir.gained === 0, String(mir.gained));
@@ -497,10 +501,11 @@ check('the player sees their own selection',
 
 const mBoard = mr.leaderboard;
 check('perfect beats partial beats mixed',
-  mBoard[0].name === 'Perfect' && mBoard[0].score === 1000 &&
-  mBoard.find((p) => p.name === 'Partial').score === 500 &&
+  mBoard[0].name === 'Perfect' &&
+  near(mBoard[0].score, 1000) &&
+  near(mBoard.find((p) => p.name === 'Partial').score, 500) &&
   mBoard.find((p) => p.name === 'Mixed').score === 0,
-  JSON.stringify(mBoard));
+  JSON.stringify(mBoard.map((p) => `${p.name}:${p.score}`)));
 
 // A single-answer question must still refuse a multi selection.
 await ask(host, 'host:reset');

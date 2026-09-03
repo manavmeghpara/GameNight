@@ -9,9 +9,9 @@
     "node": ">=20"
   },
   "scripts": {
-    "start": "node server/index.js",
-    "dev": "node --watch server/index.js",
-    "test": "node test/pages.test.mjs && node test/screens.test.mjs && node test/lobby.test.mjs && node test/builder.test.mjs && node test/game.test.mjs"
+    "start": "node --env-file-if-exists=.env server/index.js",
+    "dev": "node --watch --env-file-if-exists=.env server/index.js",
+    "test": "node test/pages.test.mjs && node test/screens.test.mjs && node test/lobby.test.mjs && node test/builder.test.mjs && node test/game.test.mjs && node test/chat.test.mjs"
   },
   "dependencies": {
     "express": "^4.21.2",

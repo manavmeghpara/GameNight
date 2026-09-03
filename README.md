@@ -16,6 +16,7 @@ the media is on your machine.
 - [Quick start](#quick-start)
 - [Letting phones join](#letting-phones-join)
 - [Building a quiz](#building-a-quiz)
+- [The movie assistant](#the-movie-assistant)
 - [Running a game](#running-a-game)
 - [How scoring works](#how-scoring-works)
 - [Supported media](#supported-media)
@@ -142,6 +143,82 @@ files, so deleting one quiz never breaks the other.
 
 ---
 
+## The movie assistant
+
+The quiz builder has a **🎬 Ask** button in the bottom-right corner. It opens a chat panel
+you can ask anything about film — cast lists, release years, box office, who directed what,
+or "give me three trivia questions about Pixar".
+
+**It does not answer from memory.** Every fact comes from a live TMDB lookup, and it is told
+to say it could not find something rather than guess. That's the difference between a
+useful research tool and one that invents a plausible-looking wrong year for your quiz.
+
+### Setting it up
+
+The button appears whether or not it's configured — if keys are missing it shows you exactly
+which ones and where to get them.
+
+You need **a model provider** and **TMDB**:
+
+| | |
+|---|---|
+| **OpenAI** (default) | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) — **paid**, needs credit on your account. Reliable, no quota surprises |
+| **Google AI** (Gemini) | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) — **free tier**, no card needed. Defaults to `gemini-3.5-flash-lite`, whose free allowance is big enough for real use |
+| **TMDB** (required) | [themoviedb.org/settings/api](https://www.themoviedb.org/settings/api) — free. Paste **either** the *API Read Access Token* or the short *API Key* |
+
+```bash
+cp .env.example .env    # then edit it
+npm start
+```
+
+Set whichever model key you have. If both are present OpenAI wins; force one with
+`LLM_PROVIDER=openai` or `LLM_PROVIDER=gemini`.
+
+> **On cost:** OpenAI charges per token. A question costs a few calls (one per tool round
+> trip), so it's fractions of a cent each — but it is not free. Set `OPENAI_MODEL` to a
+> smaller model to cut it further; looking a fact up and reporting it doesn't need a
+> flagship model.
+
+### How it works
+
+Your keys never reach the browser — the page only talks to your own `/api/chat`, and the
+server holds the credentials. Conversations run **stateless** (`store: false`), so the full
+history is sent from your machine each turn and the provider retains nothing.
+
+The model is given six tools and decides which to call:
+
+| Tool | What it looks up |
+|---|---|
+| `search_movies` | Films by title, optionally narrowed by year or original language |
+| `get_movie_details` | Plot, runtime, genres, budget, box office, director, cast, trailer |
+| `search_people` | Actors, directors, writers and composers by name |
+| `get_person_credits` | Biography and full filmography |
+| `discover_movies` | Browse by language, decade, genre, or "both these actors" |
+| `list_genres` | TMDB genre ids, for the filters above |
+
+For Indian cinema it passes the right language code — `hi` Hindi, `ta` Tamil, `te` Telugu,
+`ml` Malayalam, `kn` Kannada, `bn` Bengali — so "best Hindi films of the 90s" returns Hindi
+films, not Hollywood ones with an Indian release.
+
+### Tuning
+
+| Variable | Default | What it does |
+|---|---|---|
+| `LLM_PROVIDER` | whichever key is set | `openai` or `gemini` |
+| `OPENAI_MODEL` | `gpt-5.6` | Which OpenAI model to use |
+| `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Which Gemini model to use |
+| `GEMINI_THINKING` | `low` | Gemini reasoning depth: `low`, `medium`, `high` |
+
+`GEMINI_THINKING` is worth knowing about. Looking a fact up needs very little reasoning, but
+**thinking tokens dominate both the response time and the free-tier quota** — a trivial
+prompt can spend 111 thinking tokens against 9 of output. `low` keeps answers fast.
+
+Every call is retried automatically on dropped connections, 5xx errors and rate limits, so a
+passing blip never reaches you. Watch the server console for `[tmdb]`, `[openai]` or
+`[gemini] retry` lines if answers feel slow.
+
+---
+
 ## Running a game
 
 On the host screen: **Create a game** → pick a quiz → **Start game** once players have joined.
@@ -257,6 +334,10 @@ server/
   quizzes.js    quiz model, validation, saving to disk
   media.js      upload handling and the allowed file types
   api.js        REST API used by the quiz builder
+  tmdb.js       TMDB client, shaped into the tools the assistant can call
+  chat.js       the tool-calling loop behind the movie assistant
+  http.js       fetch with retries for dropped connections and rate limits
+  providers/    one driver per model provider (openai.js, gemini.js)
 
 public/
   index.html    player: join, then play
@@ -270,7 +351,8 @@ public/
     join.js     player logic
     host.js     host logic
     admin.js    builder logic
-  css/          style.css (shared), game.css (play screens), admin.css (builder)
+    chat.js     the movie assistant panel
+  css/          style.css (shared), game.css (play), admin.css, chat.css
 
 test/           see below
 ```
@@ -287,7 +369,7 @@ sent it, including when they reconnect mid-question.
 npm test
 ```
 
-Runs five suites, roughly 280 checks:
+Runs six suites, roughly 440 checks:
 
 | Suite | Covers |
 |---|---|
@@ -296,8 +378,10 @@ Runs five suites, roughly 280 checks:
 | `lobby.test.mjs` | Rooms, joining, kicking, reconnects |
 | `builder.test.mjs` | Quiz CRUD, uploads, validation, hostile input |
 | `game.test.mjs` | Scoring maths, phase timing, and everything the server should refuse |
+| `chat.test.mjs` | The movie assistant's tool-call loop, run against **both** providers with the network stubbed |
 
-Each suite starts its own server on its own port, so no setup is needed.
+Each suite starts its own server on its own port, so no setup is needed — and the chat
+suite stubs the network, so it needs no API keys and burns no quota.
 
 ---
 
@@ -321,6 +405,28 @@ room was closed or the server restarted; rooms live in memory and don't survive 
 
 **Port 3000 is already in use.**
 Run on another port: `PORT=8080 npm start`.
+
+**The movie assistant says it needs setup after I added my keys.**
+The keys are read at startup — restart the server. Check the file is named exactly `.env`
+in the project root (not `.env.txt`), and that the lines have no quotes or spaces around
+the `=`.
+
+**The assistant says the OpenAI account is out of credit.**
+The API is billed separately from a ChatGPT subscription — a Plus/Pro plan does *not* include
+API usage. Add credit at
+[platform.openai.com/billing](https://platform.openai.com/settings/organization/billing).
+
+**The assistant says the Google AI free tier quota is used up.**
+It's metered per minute, and a single question costs several calls (one per tool round trip),
+so a big model can rate-limit itself mid-answer. That's why the default is
+`gemini-3.5-flash-lite` — if you've set `GEMINI_MODEL` to something larger, that's the likely
+cause. Otherwise wait a minute; it resets on a rolling basis. Your live limits are at
+[aistudio.google.com/rate-limit](https://aistudio.google.com/rate-limit).
+
+**The assistant says it can't find a film you know exists.**
+It only reports what TMDB has. Try the original-language title, or add the year. Some
+older regional films genuinely have thin TMDB entries — you can
+[add them yourself](https://www.themoviedb.org/) as it's community-edited.
 
 ---
 

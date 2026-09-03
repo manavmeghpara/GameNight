@@ -15,6 +15,7 @@ import {
   TIME_LIMITS,
 } from './quizzes.js';
 import { copyUpload, deleteUpload, kindForFilename, upload, MAX_UPLOAD_BYTES } from './media.js';
+import { ask, chatStatus } from './chat.js';
 
 export const api = express.Router();
 
@@ -119,4 +120,28 @@ api.post('/upload', (req, res) => {
 
 api.post('/upload/delete', async (req, res) => {
   res.json({ ok: await deleteUpload(req.body?.url) });
+});
+
+// --- movie assistant --------------------------------------------------------
+
+api.get('/chat/status', (req, res) => {
+  res.json(chatStatus());
+});
+
+api.post('/chat', async (req, res) => {
+  const status = chatStatus();
+  if (!status.ready) {
+    return res.status(503).json({
+      error: 'The movie assistant is not set up yet.',
+      status,
+    });
+  }
+  try {
+    const { reply, history, toolCalls } = await ask(req.body?.history, req.body?.message);
+    res.json({ reply, history, toolCalls });
+  } catch (err) {
+    // These are upstream failures (rate limits, bad keys, timeouts) rather than
+    // bugs, so pass the message through — the panel shows it to the user.
+    res.status(502).json({ error: err.message ?? 'The assistant failed to answer.' });
+  }
 });

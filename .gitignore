@@ -2,3 +2,7 @@ node_modules/
 *.log
 uploads/
 data/
+
+# API keys — never commit these
+.env
+.env.local

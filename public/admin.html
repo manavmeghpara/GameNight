@@ -6,6 +6,7 @@
     <title>GameNight — Quiz Builder</title>
     <link rel="stylesheet" href="/css/style.css" />
     <link rel="stylesheet" href="/css/admin.css" />
+    <link rel="stylesheet" href="/css/chat.css" />
   </head>
   <body class="admin">
     <!-- ==================== Library ==================== -->
@@ -142,8 +143,43 @@
       </div>
     </div>
 
+    <!-- ==================== Movie assistant ==================== -->
+    <button id="chat-fab" class="fab" type="button" title="Ask about movies" aria-expanded="false">
+      <span class="fab__icon" aria-hidden="true">🎬</span>
+      <span class="fab__label">Ask</span>
+    </button>
+
+    <section id="chat-panel" class="chat hidden" aria-label="Movie assistant">
+      <header class="chat__head">
+        <div>
+          <strong>Movie assistant</strong>
+          <span class="chat__sub" id="chat-sub">Ask about any film</span>
+        </div>
+        <div class="chat__head-actions">
+          <button id="chat-clear" class="icon-btn" type="button" title="Start a new conversation">⟳</button>
+          <button id="chat-close" class="icon-btn" type="button" title="Close">✕</button>
+        </div>
+      </header>
+
+      <div id="chat-log" class="chat__log" aria-live="polite"></div>
+
+      <div id="chat-setup" class="chat__setup hidden"></div>
+
+      <form id="chat-form" class="chat__form" autocomplete="off">
+        <textarea
+          id="chat-input"
+          class="chat__input"
+          rows="1"
+          maxlength="1000"
+          placeholder="Which films did Nolan direct?"
+        ></textarea>
+        <button id="chat-send" class="chat__send" type="submit" title="Send">➤</button>
+      </form>
+    </section>
+
     <script src="/js/common.js"></script>
     <script src="/js/shapes.js"></script>
     <script src="/js/admin.js"></script>
+    <script src="/js/chat.js"></script>
   </body>
 </html>

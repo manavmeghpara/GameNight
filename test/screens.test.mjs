@@ -627,5 +627,174 @@ console.log('\n-- pad layouts across option counts --');
   }
 }
 
+// ===========================================================================
+console.log('\n-- movie assistant panel --');
+// ===========================================================================
+{
+  /** Loads admin.html with the chat API stubbed. */
+  async function loadAdmin({ status, reply }) {
+    const html = fs.readFileSync(path.join(PUBLIC, 'admin.html'), 'utf8');
+    const virtualConsole = new VirtualConsole();
+    virtualConsole.on('jsdomError', (err) => console.error(err.message));
+
+    const dom = new JSDOM(html, {
+      runScripts: 'outside-only',
+      pretendToBeVisual: true,
+      url: 'http://localhost:3000/admin.html',
+      virtualConsole,
+    });
+    const { window } = dom;
+    const posts = [];
+
+    window.io = () => ({ on() {}, once() {}, emit() {} });
+    window.confirm = () => true;
+    window.alert = () => {};
+    window.fetch = async (url, options) => {
+      const href = String(url);
+      if (href.includes('/api/chat/status')) {
+        return { ok: true, json: async () => status };
+      }
+      if (href.includes('/api/chat')) {
+        posts.push(JSON.parse(options.body));
+        return { ok: reply.ok !== false, status: reply.status ?? 200, json: async () => reply };
+      }
+      if (href.includes('/api/config')) {
+        return { ok: true, json: async () => ({ minOptions: 2, maxOptions: 8, timeLimits: [20], pointValues: [1000], maxUploadBytes: 1 }) };
+      }
+      return { ok: true, json: async () => ({ quizzes: [] }) };
+    };
+
+    window.eval(
+      ['common.js', 'shapes.js', 'admin.js', 'chat.js']
+        .map((s) => fs.readFileSync(path.join(PUBLIC, 'js', s), 'utf8'))
+        .join('\n;\n'),
+    );
+    await new Promise((r) => setTimeout(r, 40));
+    return { window, doc: window.document, posts };
+  }
+
+  // --- configured and answering --------------------------------------------
+  {
+    const { doc, window, posts } = await loadAdmin({
+      status: { ready: true, provider: 'openai', providerLabel: 'OpenAI', providerKey: 'OPENAI_API_KEY', providerSignup: 'https://platform.openai.com/api-keys', llm: true, tmdb: true, model: 'gpt-5.6' },
+      reply: {
+        reply: 'It was **Sholay** (1975).\n\n- Directed by Ramesh Sippy\n- Starring Amitabh Bachchan',
+        history: [{ type: 'user_input', content: [{ type: 'text', text: 'q' }] }],
+        toolCalls: ['search_movies'],
+      },
+    });
+
+    check('the floating button is present', Boolean(doc.getElementById('chat-fab')));
+    check('the panel starts closed', doc.getElementById('chat-panel').classList.contains('hidden'));
+    check('no setup notice when configured', doc.getElementById('chat-setup').classList.contains('hidden'));
+
+    doc.getElementById('chat-fab').dispatchEvent(new window.Event('click'));
+    check('clicking the button opens the panel', !doc.getElementById('chat-panel').classList.contains('hidden'));
+    check('the button tucks away while open',
+      doc.getElementById('chat-fab').classList.contains('fab--tucked'));
+    check('suggestion chips are offered', doc.querySelectorAll('.chip-btn').length > 0);
+
+    doc.getElementById('chat-input').value = 'Which film is this?';
+    doc.getElementById('chat-form').dispatchEvent(new window.Event('submit'));
+    await new Promise((r) => setTimeout(r, 40));
+
+    check('the question is posted to the server', posts.length === 1 && posts[0].message === 'Which film is this?',
+      JSON.stringify(posts));
+    check('history is sent along', Array.isArray(posts[0].history));
+    check('the question appears in the log', Boolean(doc.querySelector('.msg--you')));
+    check('the answer appears in the log', Boolean(doc.querySelector('.msg--bot')));
+    check('the thinking indicator is gone', !doc.querySelector('.thinking'));
+    check('the input is cleared after sending', doc.getElementById('chat-input').value === '');
+
+    const bot = doc.querySelector('.msg--bot');
+    check('bold markdown becomes a <strong>',
+      bot.querySelector('strong')?.textContent === 'Sholay', bot.innerHTML.slice(0, 120));
+    check('a dash list becomes a <ul> with items',
+      bot.querySelector('ul')?.children.length === 2, bot.innerHTML.slice(0, 200));
+    check('the asterisks are not shown literally', !bot.textContent.includes('**'));
+
+    // Second turn carries the history the server returned.
+    doc.getElementById('chat-input').value = 'Who directed it?';
+    doc.getElementById('chat-form').dispatchEvent(new window.Event('submit'));
+    await new Promise((r) => setTimeout(r, 40));
+    check('the second turn sends back the returned history',
+      posts[1].history.length === 1 && posts[1].history[0].type === 'user_input',
+      JSON.stringify(posts[1].history));
+
+    // Clearing wipes the conversation.
+    doc.getElementById('chat-clear').dispatchEvent(new window.Event('click'));
+    check('clearing empties the log', doc.querySelectorAll('.msg').length === 0);
+    check('clearing brings the suggestions back', doc.querySelectorAll('.chip-btn').length > 0);
+
+    doc.getElementById('chat-close').dispatchEvent(new window.Event('click'));
+    check('closing hides the panel', doc.getElementById('chat-panel').classList.contains('hidden'));
+    check('closing brings the button back',
+      !doc.getElementById('chat-fab').classList.contains('fab--tucked'));
+  }
+
+  // --- model output must never be able to inject HTML ------------------------
+  {
+    const { doc, window } = await loadAdmin({
+      status: { ready: true, provider: 'openai', providerLabel: 'OpenAI', providerKey: 'OPENAI_API_KEY', providerSignup: 'https://platform.openai.com/api-keys', llm: true, tmdb: true },
+      reply: {
+        reply: 'Look: <img src=x onerror="globalThis.PWNED=1"> and <script>globalThis.PWNED=1<\/script>',
+        history: [],
+        toolCalls: [],
+      },
+    });
+
+    doc.getElementById('chat-fab').dispatchEvent(new window.Event('click'));
+    doc.getElementById('chat-input').value = 'try it';
+    doc.getElementById('chat-form').dispatchEvent(new window.Event('submit'));
+    await new Promise((r) => setTimeout(r, 40));
+
+    const bot = doc.querySelector('.msg--bot');
+    check('markup in a reply is not parsed as HTML',
+      bot.querySelector('img') === null && bot.querySelector('script') === null, bot.innerHTML.slice(0, 120));
+    check('markup in a reply is shown as text',
+      bot.textContent.includes('<img src=x'), bot.textContent.slice(0, 80));
+    check('nothing from the reply executed', window.PWNED === undefined);
+  }
+
+  // --- not configured --------------------------------------------------------
+  {
+    const { doc, window } = await loadAdmin({
+      status: { ready: false, provider: 'openai', providerLabel: 'OpenAI', providerKey: 'OPENAI_API_KEY', providerSignup: 'https://platform.openai.com/api-keys', llm: false, tmdb: true },
+      reply: {},
+    });
+
+    doc.getElementById('chat-fab').dispatchEvent(new window.Event('click'));
+    check('an unconfigured assistant shows setup help',
+      !doc.getElementById('chat-setup').classList.contains('hidden'));
+    check('the setup help names the missing key',
+      doc.getElementById('chat-setup').textContent.includes('OPENAI_API_KEY'),
+      doc.getElementById('chat-setup').textContent.slice(0, 120));
+    check('the setup help does not name the key that is present',
+      !doc.getElementById('chat-setup').textContent.includes('TMDB_API_KEY'));
+    check('the input is disabled until it is set up', doc.getElementById('chat-input').disabled);
+    check('the send button is disabled too', doc.getElementById('chat-send').disabled);
+  }
+
+  // --- server error ----------------------------------------------------------
+  {
+    const { doc, window } = await loadAdmin({
+      status: { ready: true, provider: 'openai', providerLabel: 'OpenAI', providerKey: 'OPENAI_API_KEY', providerSignup: 'https://platform.openai.com/api-keys', llm: true, tmdb: true },
+      reply: { ok: false, status: 502, error: "Gemini's free tier is rate limited right now." },
+    });
+
+    doc.getElementById('chat-fab').dispatchEvent(new window.Event('click'));
+    doc.getElementById('chat-input').value = 'hello';
+    doc.getElementById('chat-form').dispatchEvent(new window.Event('submit'));
+    await new Promise((r) => setTimeout(r, 40));
+
+    check('an upstream error is shown to the user', Boolean(doc.querySelector('.msg--error')));
+    check('the error text is the one the server sent',
+      /rate limited/.test(doc.querySelector('.msg--error').textContent),
+      doc.querySelector('.msg--error')?.textContent);
+    check('the composer is usable again after an error',
+      !doc.getElementById('chat-send').disabled);
+  }
+}
+
 console.log(`\n  ${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

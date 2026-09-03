@@ -19,7 +19,7 @@ const OPTIONAL_IDS = new Set(['media-el', 'banner']);
 const PAGES = [
   { html: 'index.html', scripts: ['common.js', 'shapes.js', 'pads.js', 'join.js'] },
   { html: 'host.html', scripts: ['common.js', 'shapes.js', 'pads.js', 'stage.js', 'host.js'] },
-  { html: 'admin.html', scripts: ['common.js', 'shapes.js', 'admin.js'] },
+  { html: 'admin.html', scripts: ['common.js', 'shapes.js', 'admin.js', 'chat.js'] },
 ];
 
 let pass = 0,
