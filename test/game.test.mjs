@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { io } from 'socket.io-client';
 
-import { leadInFor, scoreAnswer } from '../server/game.js';
+import { leadInFor, scoreAnswer, scoreSelection } from '../server/game.js';
 
 const PORT = 3102;
 const URL = `http://localhost:${PORT}`;
@@ -88,6 +88,44 @@ check('streak bonus caps at 500',
 check('double points question doubles the base',
   scoreAnswer({ points: 2000, timeLimitMs: 20000, elapsedMs: 0, streak: 1 }) === 2000);
 
+console.log('\n-- multi-answer scoring --');
+
+// A 1000-point question with 2 correct options: each share is worth 500.
+const two = (chosenCorrect, chosenWrong, elapsedMs = 0, streak = 1) =>
+  scoreSelection({ points: 1000, timeLimitMs: 20000, elapsedMs, correctCount: 2, chosenCorrect, chosenWrong, streak });
+
+check('both correct, instantly, scores the full points', two(2, 0) === 1000, String(two(2, 0)));
+check('one of two correct scores half the points', two(1, 0) === 500, String(two(1, 0)));
+check('one correct and one wrong nets zero', two(1, 1) === 0, String(two(1, 1)));
+check('one correct and one wrong is still zero when slow',
+  two(1, 1, 20000) === 0, String(two(1, 1, 20000)));
+check('both correct plus a wrong pick loses one share',
+  two(2, 1) === 500, String(two(2, 1)));
+check('only wrong picks score zero, never negative', two(0, 2) === 0, String(two(0, 2)));
+check('answering nothing scores zero', two(0, 0) === 0, String(two(0, 0)));
+
+// The worked example: 1000 points, 4 correct (share 250), 3 right + 1 wrong,
+// halfway through the timer. Credit is speed-scaled, the penalty is flat:
+//   credit  = 3 x 250 x 0.75 = 562.5
+//   penalty = 1 x 250        = 250
+//   net     = 312.5          -> 313
+const four = scoreSelection({
+  points: 1000, timeLimitMs: 20000, elapsedMs: 10000,
+  correctCount: 4, chosenCorrect: 3, chosenWrong: 1, streak: 1,
+});
+check('3 of 4 correct plus a wrong pick, at half time, scores 313', four === 313, String(four));
+
+check('speed still separates two identical selections',
+  two(2, 0, 2000) > two(2, 0, 8000), `${two(2, 0, 2000)} vs ${two(2, 0, 8000)}`);
+check('full marks earns the streak bonus', two(2, 0, 0, 3) === 1200, String(two(2, 0, 0, 3)));
+check('partial credit earns no streak bonus', two(1, 0, 0, 3) === 500, String(two(1, 0, 0, 3)));
+check('a wrong pick forfeits the streak bonus even with all correct',
+  two(2, 1, 0, 5) === 500, String(two(2, 1, 0, 5)));
+check('a zero-point multi question stays at zero',
+  scoreSelection({ points: 0, timeLimitMs: 20000, elapsedMs: 0, correctCount: 2, chosenCorrect: 2, chosenWrong: 0, streak: 3 }) === 0);
+check('an odd split rounds sensibly',
+  scoreSelection({ points: 1000, timeLimitMs: 20000, elapsedMs: 0, correctCount: 3, chosenCorrect: 3, chosenWrong: 0, streak: 1 }) === 1000);
+
 console.log('\n-- lead-in timing --');
 
 check('no media opens answers almost at once', leadInFor({ media: null }) === 1500);
@@ -125,7 +163,7 @@ const quiz = {
         { id: '2'.repeat(16), text: 'Alien' },
         { id: '3'.repeat(16), text: 'The Thing' },
       ],
-      correctIndex: 0,
+      correctIndexes: [0],
     },
     {
       id: 'b'.repeat(16),
@@ -140,7 +178,7 @@ const quiz = {
         { id: '4'.repeat(16), text: 'Yes' },
         { id: '5'.repeat(16), text: 'No' },
       ],
-      correctIndex: 0,
+      correctIndexes: [0],
     },
   ],
 };
@@ -192,7 +230,7 @@ check('host sees the full question', hq1.prompt === 'Which shark movie?' && hq1.
 check('host is told the time limit and points', hq1.timeLimit === 5 && hq1.points === 1000);
 check('player sees the prompt and options', pq1.prompt === 'Which shark movie?' && pq1.options.length === 3);
 check('player is NOT told the correct answer',
-  !('correctIndex' in pq1) && JSON.stringify(pq1).indexOf('correctIndex') === -1, JSON.stringify(pq1));
+  !JSON.stringify(pq1).includes('correctIndex'), JSON.stringify(pq1));
 check('question starts in the reading phase', pq1.phase === 'reading');
 
 const tooEarly = await ask(fast.socket, 'player:answer', { optionIndex: 0 });
@@ -237,7 +275,8 @@ const hr1 = await hostReveal;
 const fr1 = await fastReveal;
 const sr1 = await silentReveal;
 
-check('reveal names the correct answer', hr1.correctIndex === 0 && hr1.correctText === 'Jaws');
+check('reveal names the correct answer',
+  JSON.stringify(hr1.correctIndexes) === '[0]' && hr1.correctText === 'Jaws');
 check('reveal tallies each option', JSON.stringify(hr1.tallies) === JSON.stringify([2, 1, 0]), JSON.stringify(hr1.tallies));
 check('reveal counts who answered', hr1.answered === 3 && hr1.players === 4, `${hr1.answered}/${hr1.players}`);
 check('correct player is told so', fr1.correct === true && fr1.gained > 0, JSON.stringify(fr1));
@@ -326,9 +365,11 @@ const fastAgain = io(URL);
 await wait(fastAgain, 'connect');
 const resumed = await ask(fastAgain, 'player:resume', { code, playerId: fast.id });
 check('mid-game resume returns game state', resumed.ok && resumed.state.game?.phase === 'answering', JSON.stringify(resumed.state?.game).slice(0, 160));
-check('resumed player sees their own answer', resumed.state.game.yourIndex === 0, JSON.stringify(resumed.state.game.yourIndex));
+check('resumed player sees their own answer',
+  JSON.stringify(resumed.state.game.yourIndexes) === '[0]', JSON.stringify(resumed.state.game.yourIndexes));
 check('resumed state does not leak the answer',
-  !('correctIndex' in resumed.state.game), JSON.stringify(Object.keys(resumed.state.game)));
+  !JSON.stringify(resumed.state.game).includes('correctIndex'),
+  JSON.stringify(Object.keys(resumed.state.game)));
 
 // --- joining a game in progress ----------------------------------------------
 
@@ -343,9 +384,139 @@ const autoReveal = wait(host, 'game:reveal', 8000);
 await autoReveal;
 check('the question closes itself when time runs out', true);
 
+// ===========================================================================
+console.log('\n-- a multi-answer question --');
+// ===========================================================================
+
+await ask(host, 'host:reset');
+
+const multiMade = await send('POST', '/api/quizzes', { title: 'Multi Test' });
+const multiId = multiMade.body.quiz.id;
+const multiSave = await send('PUT', `/api/quizzes/${multiId}`, {
+  quiz: {
+    ...multiMade.body.quiz,
+    title: 'Multi Test',
+    questions: [
+      {
+        id: 'c'.repeat(16),
+        prompt: 'Which of these did Spielberg direct?',
+        media: null, clipStart: 0, clipEnd: null, hideVideo: false,
+        timeLimit: 5,
+        points: 1000,
+        options: [
+          { id: '6'.repeat(16), text: 'Jaws' },
+          { id: '7'.repeat(16), text: 'E.T.' },
+          { id: '8'.repeat(16), text: 'Alien' },
+          { id: '9'.repeat(16), text: 'The Thing' },
+        ],
+        multiSelect: true,
+        correctIndexes: [0, 1],
+      },
+    ],
+  },
+});
+check('a multi-answer quiz is playable', multiSave.body.problems.length === 0, JSON.stringify(multiSave.body.problems));
+check('multiSelect survives saving', multiSave.body.quiz.questions[0].multiSelect === true);
+check('both correct answers survive saving',
+  JSON.stringify(multiSave.body.quiz.questions[0].correctIndexes) === '[0,1]',
+  JSON.stringify(multiSave.body.quiz.questions[0].correctIndexes));
+
+// Every option marked correct is refused — there would be nothing to get wrong.
+const allCorrect = await send('PUT', `/api/quizzes/${multiId}`, {
+  quiz: {
+    title: 'All correct',
+    questions: [{
+      prompt: 'Pick them all', options: [{ text: 'A' }, { text: 'B' }],
+      multiSelect: true, correctIndexes: [0, 1],
+    }],
+  },
+});
+check('a question where every option is correct is flagged',
+  allCorrect.body.problems.some((p) => /every option/i.test(p)), JSON.stringify(allCorrect.body.problems));
+await send('PUT', `/api/quizzes/${multiId}`, { quiz: multiSave.body.quiz });
+
+const mPerfect = await joinPlayer('Perfect');
+const mPartial = await joinPlayer('Partial');
+const mMixed = await joinPlayer('Mixed');
+
+const mQuestion = wait(mPerfect.socket, 'game:question');
+await ask(host, 'host:start', { quizId: multiId });
+const mq = await mQuestion;
+check('player is told it is a multi-answer question', mq.multiSelect === true, JSON.stringify(mq.multiSelect));
+check('player is not told how many are correct',
+  !JSON.stringify(mq).includes('correctCount') && !JSON.stringify(mq).includes('correctIndex'), JSON.stringify(mq));
+
+await wait(mPerfect.socket, 'game:answers-open', 6000);
+
+const perfectReply = await ask(mPerfect.socket, 'player:answer', { indexes: [0, 1] });
+check('a multi selection is accepted', perfectReply.ok, JSON.stringify(perfectReply));
+check('the accepted selection is echoed back',
+  JSON.stringify(perfectReply.indexes) === '[0,1]', JSON.stringify(perfectReply.indexes));
+
+const dupeIndexes = await ask(mPartial.socket, 'player:answer', { indexes: [0, 0, 0] });
+check('duplicate indexes collapse to one', dupeIndexes.ok && JSON.stringify(dupeIndexes.indexes) === '[0]',
+  JSON.stringify(dupeIndexes));
+
+const badMulti = await ask(mMixed.socket, 'player:answer', { indexes: [0, 99] });
+check('a selection containing a bad index is refused', !badMulti.ok, JSON.stringify(badMulti));
+
+const emptyMulti = await ask(mMixed.socket, 'player:answer', { indexes: [] });
+check('an empty selection is refused', !emptyMulti.ok, JSON.stringify(emptyMulti));
+
+await ask(mMixed.socket, 'player:answer', { indexes: [0, 2] }); // one right, one wrong
+
+const mReveal = wait(host, 'game:reveal');
+const perfectReveal = wait(mPerfect.socket, 'game:reveal');
+const partialReveal = wait(mPartial.socket, 'game:reveal');
+const mixedReveal = wait(mMixed.socket, 'game:reveal');
+await ask(host, 'host:advance');
+const mr = await mReveal;
+const pr = await perfectReveal;
+const par = await partialReveal;
+const mir = await mixedReveal;
+
+check('reveal lists every correct answer',
+  JSON.stringify(mr.correctIndexes) === '[0,1]', JSON.stringify(mr.correctIndexes));
+check('reveal names every correct answer',
+  JSON.stringify(mr.correctTexts) === '["Jaws","E.T."]', JSON.stringify(mr.correctTexts));
+check('tallies count picks, not players',
+  JSON.stringify(mr.tallies) === '[3,1,1,0]', JSON.stringify(mr.tallies));
+
+check('full marks reads as correct', pr.correct === true && pr.partial === false, JSON.stringify(pr));
+check('full marks scores the whole question', pr.gained === 1000, String(pr.gained));
+check('full marks advances the streak', pr.streak === 1, String(pr.streak));
+
+check('half the answers reads as partial', par.correct === false && par.partial === true, JSON.stringify(par));
+check('half the answers scores half', par.gained === 500, String(par.gained));
+check('partial credit does not advance the streak', par.streak === 0, String(par.streak));
+
+check('one right and one wrong scores zero', mir.gained === 0, String(mir.gained));
+check('one right and one wrong is not partial', mir.partial === false, JSON.stringify(mir));
+check('the player sees their own selection',
+  JSON.stringify(mir.yourIndexes) === '[0,2]', JSON.stringify(mir.yourIndexes));
+
+const mBoard = mr.leaderboard;
+check('perfect beats partial beats mixed',
+  mBoard[0].name === 'Perfect' && mBoard[0].score === 1000 &&
+  mBoard.find((p) => p.name === 'Partial').score === 500 &&
+  mBoard.find((p) => p.name === 'Mixed').score === 0,
+  JSON.stringify(mBoard));
+
+// A single-answer question must still refuse a multi selection.
+await ask(host, 'host:reset');
+await ask(host, 'host:start', { quizId });
+await wait(mPerfect.socket, 'game:answers-open', 6000);
+const multiOnSingle = await ask(mPerfect.socket, 'player:answer', { indexes: [0, 1] });
+check('a single-answer question refuses multiple picks',
+  !multiOnSingle.ok && /one answer/i.test(multiOnSingle.error), JSON.stringify(multiOnSingle));
+const singleStillWorks = await ask(mPartial.socket, 'player:answer', { optionIndex: 0 });
+check('a single-answer question still accepts one pick', singleStillWorks.ok, JSON.stringify(singleStillWorks));
+
 // --- cleanup -----------------------------------------------------------------
 
 await ask(host, 'host:close');
+await send('DELETE', `/api/quizzes/${multiId}`);
+for (const s of [mPerfect.socket, mPartial.socket, mMixed.socket]) s.close();
 await send('DELETE', `/api/quizzes/${quizId}`);
 await send('DELETE', `/api/quizzes/${blank.body.quiz.id}`);
 

@@ -116,8 +116,14 @@
           <div class="options">
             <div class="options__head">
               <label style="margin: 0">Answer options</label>
-              <span class="muted options__hint">Click the circle to mark the correct answer</span>
+              <label class="switch">
+                <input id="q-multi" type="checkbox" />
+                Multiple correct answers
+              </label>
             </div>
+            <p class="muted options__hint" id="options-hint">
+              Click the circle to mark the correct answer
+            </p>
             <div id="options-list" class="options__list"></div>
             <button id="add-option-btn" class="btn btn--ghost btn--sm" type="button">
               + Add option

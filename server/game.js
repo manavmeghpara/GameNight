@@ -44,16 +44,74 @@ export function leadInFor(question) {
   return LEAD_IN_UNTIMED_MEDIA_MS;
 }
 
+/** Speed multiplier: 1.0 the instant answers open, 0.5 at the buzzer. */
+function speedFactor(elapsedMs, timeLimitMs) {
+  return 1 - Math.min(1, Math.max(0, elapsedMs / timeLimitMs)) / 2;
+}
+
 /**
- * Kahoot-style scoring: a correct answer is worth full points at t=0 and half
- * at the buzzer, plus a bonus for consecutive correct answers.
+ * Scores one submission, single- or multi-answer.
+ *
+ * A question's points are split evenly across its correct options. Each correct
+ * option picked earns its share, scaled by how fast the answer came in. Each
+ * wrong option picked costs one full share, unscaled — so picking one right and
+ * one wrong always nets zero, however quickly you did it. A question can never
+ * score below zero.
+ *
+ * The streak bonus needs full marks: every correct option and no wrong ones.
  */
+export function scoreSelection({
+  points,
+  timeLimitMs,
+  elapsedMs,
+  correctCount,
+  chosenCorrect,
+  chosenWrong,
+  streak,
+}) {
+  if (!points || correctCount <= 0) return 0;
+
+  const share = points / correctCount;
+  const credit = chosenCorrect * share * speedFactor(elapsedMs, timeLimitMs);
+  const penalty = chosenWrong * share;
+  const earned = Math.max(0, Math.round(credit - penalty));
+
+  const fullMarks = chosenCorrect === correctCount && chosenWrong === 0;
+  const bonus = fullMarks
+    ? Math.min(STREAK_BONUS_CAP, Math.max(0, streak - 1) * STREAK_BONUS)
+    : 0;
+
+  return earned + bonus;
+}
+
+/** The single-answer case: one correct option, picked or not. */
 export function scoreAnswer({ points, timeLimitMs, elapsedMs, streak }) {
-  if (!points) return 0;
-  const fraction = Math.min(1, Math.max(0, elapsedMs / timeLimitMs));
-  const base = Math.round(points * (1 - fraction / 2));
-  const bonus = Math.min(STREAK_BONUS_CAP, Math.max(0, streak - 1) * STREAK_BONUS);
-  return base + bonus;
+  return scoreSelection({
+    points,
+    timeLimitMs,
+    elapsedMs,
+    correctCount: 1,
+    chosenCorrect: 1,
+    chosenWrong: 0,
+    streak,
+  });
+}
+
+/**
+ * Turns whatever a client sent into a clean, de-duplicated list of option
+ * indexes. Returns null if anything about it is wrong.
+ */
+function normaliseSelection(selection, optionCount) {
+  const raw = Array.isArray(selection) ? selection : [selection];
+  if (raw.length === 0 || raw.length > optionCount) return null;
+
+  const indexes = new Set();
+  for (const value of raw) {
+    const index = Number(value);
+    if (!Number.isInteger(index) || index < 0 || index >= optionCount) return null;
+    indexes.add(index);
+  }
+  return [...indexes].sort((a, b) => a - b);
 }
 
 export class Game {
@@ -140,11 +198,15 @@ export class Game {
       timeLimit: q.timeLimit,
       points: q.points,
       options: q.options.map((o) => ({ text: o.text })),
+      multiSelect: q.multiSelect,
       leadInMs: leadInFor(q),
     };
   }
 
-  /** Players get the option text but never which one is correct. */
+  /**
+   * Players get the option text but never which ones are correct — and not how
+   * many are correct either, since the host screen is in the room with them.
+   */
   playerQuestionView() {
     const q = this.current;
     return {
@@ -155,6 +217,7 @@ export class Game {
       mediaKind: q.media?.kind ?? null,
       optionCount: q.options.length,
       options: q.options.map((o) => ({ text: o.text })),
+      multiSelect: q.multiSelect,
       timeLimit: q.timeLimit,
       points: q.points,
     };
@@ -228,9 +291,13 @@ export class Game {
 
   /**
    * Record a player's answer. Returns { ok } or { ok:false, error }.
-   * First answer wins — no changing your mind.
+   * First submission wins — no changing your mind.
+   *
+   * `selection` is an option index, or an array of them on a multi-answer
+   * question. Both forms are accepted either way round, so an older client
+   * sending a bare number still works.
    */
-  submitAnswer(player, optionIndex) {
+  submitAnswer(player, selection) {
     if (this.phase !== PHASE.ANSWERING) return { ok: false, error: 'Answers are closed.' };
     if (this.answers.has(player.id)) return { ok: false, error: 'You already answered.' };
 
@@ -238,20 +305,30 @@ export class Game {
     if (at > this.deadline + LATE_GRACE_MS) return { ok: false, error: 'Too late.' };
 
     const q = this.current;
-    const index = Number(optionIndex);
-    if (!Number.isInteger(index) || index < 0 || index >= q.options.length) {
-      return { ok: false, error: 'That is not one of the options.' };
+    const indexes = normaliseSelection(selection, q.options.length);
+    if (!indexes) return { ok: false, error: 'That is not one of the options.' };
+    if (!q.multiSelect && indexes.length > 1) {
+      return { ok: false, error: 'Pick one answer.' };
     }
 
-    const correct = index === q.correctIndex;
+    const correct = new Set(q.correctIndexes);
+    const chosenCorrect = indexes.filter((i) => correct.has(i)).length;
+    const chosenWrong = indexes.length - chosenCorrect;
+    const fullMarks = chosenCorrect === correct.size && chosenWrong === 0;
+
     // Clamp elapsed time so a late-but-forgiven answer cannot score negatively.
     const elapsedMs = Math.min(Math.max(0, at - this.openedAt), q.timeLimit * 1000);
-    const streak = correct ? player.streak + 1 : 0;
-    const gained = correct
-      ? scoreAnswer({ points: q.points, timeLimitMs: q.timeLimit * 1000, elapsedMs, streak })
-      : 0;
+    const gained = scoreSelection({
+      points: q.points,
+      timeLimitMs: q.timeLimit * 1000,
+      elapsedMs,
+      correctCount: correct.size,
+      chosenCorrect,
+      chosenWrong,
+      streak: fullMarks ? player.streak + 1 : 0,
+    });
 
-    this.answers.set(player.id, { optionIndex: index, at, correct, gained, elapsedMs });
+    this.answers.set(player.id, { indexes, at, fullMarks, gained, elapsedMs });
     this.hooks.toHost('game:answer-count', {
       answered: this.answers.size,
       total: this.activePlayers().length,
@@ -261,7 +338,7 @@ export class Game {
     if (this.answers.size >= this.activePlayers().length) {
       this.setTimer(600, () => this.reveal());
     }
-    return { ok: true, optionIndex: index };
+    return { ok: true, indexes };
   }
 
   reveal() {
@@ -275,25 +352,29 @@ export class Game {
     // scoring atomic and makes the leaderboard consistent with the reveal.
     for (const player of this.room.players.values()) {
       const answer = this.answers.get(player.id);
-      if (answer?.correct) {
-        player.score += answer.gained;
-        player.streak += 1;
-      } else {
-        player.streak = 0;
-      }
+      player.score += answer?.gained ?? 0;
+      // A streak means getting the whole question right, blanks included.
+      player.streak = answer?.fullMarks ? player.streak + 1 : 0;
     }
 
+    // With multi-select these count picks, not players, so they can exceed the
+    // number of people who answered.
     const tallies = q.options.map(() => 0);
-    for (const answer of this.answers.values()) tallies[answer.optionIndex] += 1;
+    for (const answer of this.answers.values()) {
+      for (const index of answer.indexes) tallies[index] += 1;
+    }
 
     const board = this.leaderboard();
     const rankOf = new Map(board.map((p, i) => [p.id, i + 1]));
+    const correctTexts = q.correctIndexes.map((i) => q.options[i].text);
 
     this.hooks.toHost('game:reveal', {
       index: this.index,
       total: this.total,
-      correctIndex: q.correctIndex,
-      correctText: q.options[q.correctIndex].text,
+      multiSelect: q.multiSelect,
+      correctIndexes: q.correctIndexes,
+      correctTexts,
+      correctText: correctTexts.join(' · '),
       tallies,
       answered: this.answers.size,
       players: this.activePlayers().length,
@@ -306,12 +387,15 @@ export class Game {
       this.hooks.toPlayer(player, 'game:reveal', {
         index: this.index,
         total: this.total,
+        multiSelect: q.multiSelect,
         answered: Boolean(answer),
-        correct: Boolean(answer?.correct),
-        yourIndex: answer?.optionIndex ?? null,
-        correctIndex: q.correctIndex,
-        correctText: q.options[q.correctIndex].text,
-        gained: answer?.correct ? answer.gained : 0,
+        correct: Boolean(answer?.fullMarks),
+        partial: Boolean(answer) && !answer.fullMarks && answer.gained > 0,
+        yourIndexes: answer?.indexes ?? [],
+        correctIndexes: q.correctIndexes,
+        correctTexts,
+        correctText: correctTexts.join(' · '),
+        gained: answer?.gained ?? 0,
         score: player.score,
         streak: player.streak,
         rank: rankOf.get(player.id) ?? null,
@@ -414,20 +498,24 @@ export class Game {
           question: this.playerQuestionView(),
           deadline: this.deadline,
           serverNow: Date.now(),
-          yourIndex: answer?.optionIndex ?? null,
+          yourIndexes: answer?.indexes ?? null,
         };
       }
       case PHASE.REVEAL: {
         const answer = this.answers.get(player.id);
         const q = this.current;
+        const correctTexts = q.correctIndexes.map((i) => q.options[i].text);
         return {
           ...base,
+          multiSelect: q.multiSelect,
           answered: Boolean(answer),
-          correct: Boolean(answer?.correct),
-          yourIndex: answer?.optionIndex ?? null,
-          correctIndex: q.correctIndex,
-          correctText: q.options[q.correctIndex].text,
-          gained: answer?.correct ? answer.gained : 0,
+          correct: Boolean(answer?.fullMarks),
+          partial: Boolean(answer) && !answer.fullMarks && answer.gained > 0,
+          yourIndexes: answer?.indexes ?? [],
+          correctIndexes: q.correctIndexes,
+          correctTexts,
+          correctText: correctTexts.join(' · '),
+          gained: answer?.gained ?? 0,
           streak: player.streak,
         };
       }

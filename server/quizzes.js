@@ -53,7 +53,9 @@ export function blankQuestion() {
     timeLimit: 20,
     points: 1000,
     options: [blankOption(), blankOption(), blankOption(), blankOption()],
-    correctIndex: 0,
+    // "Select all that apply" when true; exactly one right answer when false.
+    multiSelect: false,
+    correctIndexes: [0],
   };
 }
 
@@ -99,6 +101,24 @@ function normaliseQuestion(raw) {
   let clipEnd = raw.clipEnd == null ? null : Math.max(0, num(raw.clipEnd, 0));
   if (clipEnd !== null && clipEnd <= clipStart) clipEnd = null;
 
+  const multiSelect = Boolean(raw.multiSelect);
+
+  // Accepts the current shape (correctIndexes) and the original single-answer
+  // shape (correctIndex), so quizzes saved before multi-select still load.
+  const rawCorrect = Array.isArray(raw.correctIndexes)
+    ? raw.correctIndexes
+    : raw.correctIndex != null
+      ? [raw.correctIndex]
+      : [];
+
+  let correctIndexes = [...new Set(rawCorrect.map((n) => Math.trunc(num(n, -1))))]
+    .filter((i) => i >= 0 && i < options.length)
+    .sort((a, b) => a - b);
+
+  if (!correctIndexes.length) correctIndexes = [0];
+  // A single-answer question can only ever have one right answer.
+  if (!multiSelect) correctIndexes = [correctIndexes[0]];
+
   return {
     id: typeof raw.id === 'string' ? raw.id : base.id,
     prompt: clampText(raw.prompt, MAX_PROMPT),
@@ -110,12 +130,17 @@ function normaliseQuestion(raw) {
     timeLimit: nearest(num(raw.timeLimit, 20), TIME_LIMITS, 20),
     points: nearest(num(raw.points, 1000), POINT_VALUES, 1000),
     options,
-    correctIndex: Math.min(Math.max(0, Math.trunc(num(raw.correctIndex, 0))), options.length - 1),
+    multiSelect,
+    correctIndexes,
   };
 }
 
-/** Accepts anything from the client and returns a well-formed quiz. */
-export function normaliseQuiz(raw, existing = null) {
+/**
+ * Accepts anything from the client and returns a well-formed quiz.
+ * Pass `touch: false` when reading from disk, so migrating an old file in
+ * memory does not make it look freshly edited.
+ */
+export function normaliseQuiz(raw, existing = null, { touch = true } = {}) {
   const questions = (Array.isArray(raw?.questions) ? raw.questions : [])
     .slice(0, MAX_QUESTIONS)
     .map(normaliseQuestion);
@@ -124,7 +149,7 @@ export function normaliseQuiz(raw, existing = null) {
     id: existing?.id ?? (typeof raw?.id === 'string' ? raw.id : id()),
     title: clampText(raw?.title, MAX_TITLE) || 'Untitled quiz',
     createdAt: existing?.createdAt ?? num(raw?.createdAt, Date.now()),
-    updatedAt: Date.now(),
+    updatedAt: touch ? Date.now() : num(raw?.updatedAt, Date.now()),
     questions: questions.length ? questions : [blankQuestion()],
   };
 }
@@ -147,8 +172,18 @@ export function validateQuiz(quiz) {
     if (filled.length < MIN_OPTIONS) {
       problems.push(`${where}: needs at least ${MIN_OPTIONS} answer options.`);
     }
-    if (!q.options[q.correctIndex]?.text) {
-      problems.push(`${where}: the correct answer is blank.`);
+
+    if (!q.correctIndexes.length) {
+      problems.push(`${where}: mark at least one correct answer.`);
+    } else if (q.correctIndexes.some((i) => !q.options[i]?.text)) {
+      problems.push(
+        q.correctIndexes.length > 1
+          ? `${where}: one of the correct answers is blank.`
+          : `${where}: the correct answer is blank.`,
+      );
+    } else if (q.multiSelect && q.correctIndexes.length === filled.length) {
+      // Nothing to get wrong makes the question free points.
+      problems.push(`${where}: every option is marked correct — add a wrong answer.`);
     }
     const seen = new Set();
     for (const o of filled) {
@@ -164,15 +199,19 @@ export function validateQuiz(quiz) {
   return problems;
 }
 
-/** Strips blank trailing options so the played quiz matches what admins see. */
+/** Strips blank options so the played quiz matches what admins see. */
 export function compactQuestion(q) {
   const options = q.options.filter((o) => o.text.length > 0);
-  const correctId = q.options[q.correctIndex]?.id;
-  const correctIndex = Math.max(
-    0,
-    options.findIndex((o) => o.id === correctId),
+
+  // Follow the correct answers by id, since dropping blanks shifts the indexes.
+  const correctIds = new Set(q.correctIndexes.map((i) => q.options[i]?.id).filter(Boolean));
+  let correctIndexes = options.reduce(
+    (acc, option, i) => (correctIds.has(option.id) ? [...acc, i] : acc),
+    [],
   );
-  return { ...q, options, correctIndex };
+  if (!correctIndexes.length) correctIndexes = [0];
+
+  return { ...q, options, correctIndexes };
 }
 
 // --- persistence ------------------------------------------------------------
@@ -192,7 +231,8 @@ export async function listQuizzes() {
   for (const file of files) {
     if (!file.endsWith('.json')) continue;
     try {
-      const quiz = JSON.parse(await fs.readFile(path.join(QUIZ_DIR, file), 'utf8'));
+      const parsed = JSON.parse(await fs.readFile(path.join(QUIZ_DIR, file), 'utf8'));
+      const quiz = normaliseQuiz(parsed, parsed, { touch: false });
       summaries.push({
         id: quiz.id,
         title: quiz.title,
@@ -210,7 +250,10 @@ export async function listQuizzes() {
 export async function readQuiz(quizId) {
   if (!isSafeId(quizId)) return null;
   try {
-    return JSON.parse(await fs.readFile(quizPath(quizId), 'utf8'));
+    const parsed = JSON.parse(await fs.readFile(quizPath(quizId), 'utf8'));
+    // Normalising on read migrates quizzes saved by older versions (single
+    // correctIndex) without rewriting the file or bumping its edited time.
+    return normaliseQuiz(parsed, parsed, { touch: false });
   } catch {
     return null;
   }

@@ -191,7 +191,8 @@ console.log('\n-- player screens --');
   padEls[0].dispatchEvent(new window.Event('click'));
   await new Promise((r) => setTimeout(r, 20));
   const answerEmit = socket.sent.filter((s) => s.event === 'player:answer');
-  check('tapping a pad sends the answer', answerEmit.length === 1 && answerEmit[0].payload.optionIndex === 0,
+  check('tapping a pad sends the answer',
+    answerEmit.length === 1 && JSON.stringify(answerEmit[0].payload.indexes) === '[0]',
     JSON.stringify(answerEmit));
   check('chosen pad is marked', padEls[0].classList.contains('pad--chosen'));
   check('other pads are dimmed and disabled',
@@ -206,7 +207,7 @@ console.log('\n-- player screens --');
 
   // Reveal — correct.
   socket.fire('game:reveal', {
-    index: 0, total: 2, answered: true, correct: true, yourIndex: 0, correctIndex: 0,
+    index: 0, total: 2, answered: true, correct: true, yourIndexes: [0], correctIndexes: [0], correctTexts: ['Jaws'],
     correctText: 'Jaws', gained: 950, score: 950, streak: 1, rank: 1, playerCount: 4,
   });
   check('correct reveal shows the result screen', shownScreen(doc, PLAYER_SCREENS) === 'screen-result');
@@ -218,7 +219,7 @@ console.log('\n-- player screens --');
 
   // Reveal — wrong, with the answer named.
   socket.fire('game:reveal', {
-    index: 1, total: 2, answered: true, correct: false, yourIndex: 2, correctIndex: 0,
+    index: 1, total: 2, answered: true, correct: false, yourIndexes: [2], correctIndexes: [0], correctTexts: ['Jaws'],
     correctText: 'Jaws', gained: 0, score: 950, streak: 0, rank: 3, playerCount: 4,
   });
   check('wrong reveal is styled as a loss',
@@ -228,14 +229,14 @@ console.log('\n-- player screens --');
 
   // Reveal — never answered.
   socket.fire('game:reveal', {
-    index: 1, total: 2, answered: false, correct: false, yourIndex: null, correctIndex: 0,
+    index: 1, total: 2, answered: false, correct: false, yourIndexes: [], correctIndexes: [0], correctTexts: ['Jaws'],
     correctText: 'Jaws', gained: 0, score: 950, streak: 0, rank: 4, playerCount: 4,
   });
   check('no answer reads as time up', /time/i.test(text(doc, 'result-title')), text(doc, 'result-title'));
 
   // Streak wording.
   socket.fire('game:reveal', {
-    index: 1, total: 2, answered: true, correct: true, yourIndex: 0, correctIndex: 0,
+    index: 1, total: 2, answered: true, correct: true, yourIndexes: [0], correctIndexes: [0], correctTexts: ['Jaws'],
     correctText: 'Jaws', gained: 1200, score: 2150, streak: 3, rank: 1, playerCount: 4,
   });
   check('a streak is called out', /3 in a row/.test(text(doc, 'result-detail')), text(doc, 'result-detail'));
@@ -272,6 +273,110 @@ console.log('\n-- player screens --');
 }
 
 // ===========================================================================
+console.log('\n-- player: a multi-answer question --');
+// ===========================================================================
+{
+  const { doc, socket, window } = await loadPage('index.html', [
+    'common.js', 'shapes.js', 'pads.js', 'join.js',
+  ]);
+
+  doc.getElementById('code').value = 'TEST';
+  doc.getElementById('name').value = 'Sofia';
+  doc.getElementById('join-form').dispatchEvent(new window.Event('submit'));
+  await new Promise((r) => setTimeout(r, 20));
+
+  const FOUR = [{ text: 'Jaws' }, { text: 'E.T.' }, { text: 'Alien' }, { text: 'The Thing' }];
+  socket.fire('game:question', {
+    index: 0, total: 1, prompt: 'Which did Spielberg direct?', hasMedia: false, mediaKind: null,
+    optionCount: 4, options: FOUR, multiSelect: true, timeLimit: 20, points: 1000, phase: 'reading',
+  });
+  socket.fire('game:answers-open', {
+    options: FOUR, deadline: Date.now() + 20000, serverNow: Date.now(), timeLimit: 20,
+  });
+
+  const pads = [...doc.getElementById('answer-pads').children];
+  check('multi question shows the select-all hint', visible(doc, 'answer-hint'));
+  check('multi question shows a submit button', visible(doc, 'answer-submit'));
+  check('submit starts disabled', doc.getElementById('answer-submit').disabled);
+
+  // Tapping toggles rather than submitting.
+  pads[0].dispatchEvent(new window.Event('click'));
+  await new Promise((r) => setTimeout(r, 10));
+  check('tapping a pad does not submit yet',
+    socket.sent.filter((s) => s.event === 'player:answer').length === 0);
+  check('tapped pad is marked as picked', pads[0].classList.contains('pad--picked'));
+  check('submit becomes available', !doc.getElementById('answer-submit').disabled);
+  check('submit counts the selection',
+    /Submit 1 answer$/.test(text(doc, 'answer-submit')), text(doc, 'answer-submit'));
+
+  pads[1].dispatchEvent(new window.Event('click'));
+  check('a second pad can be picked too',
+    pads[0].classList.contains('pad--picked') && pads[1].classList.contains('pad--picked'));
+  check('submit counts both', /Submit 2 answers$/.test(text(doc, 'answer-submit')), text(doc, 'answer-submit'));
+
+  // Tapping again unticks.
+  pads[1].dispatchEvent(new window.Event('click'));
+  check('tapping again unticks', !pads[1].classList.contains('pad--picked'));
+  pads[1].dispatchEvent(new window.Event('click'));
+
+  doc.getElementById('answer-submit').dispatchEvent(new window.Event('click'));
+  await new Promise((r) => setTimeout(r, 20));
+  const sent = socket.sent.filter((s) => s.event === 'player:answer');
+  check('submit sends the whole selection',
+    sent.length === 1 && JSON.stringify(sent[0].payload.indexes) === '[0,1]', JSON.stringify(sent));
+  check('pads lock after submitting', pads.every((p) => p.disabled));
+  check('submit button reads as locked', /locked/i.test(text(doc, 'answer-submit')), text(doc, 'answer-submit'));
+
+  doc.getElementById('answer-submit').dispatchEvent(new window.Event('click'));
+  await new Promise((r) => setTimeout(r, 20));
+  check('submitting twice sends nothing more',
+    socket.sent.filter((s) => s.event === 'player:answer').length === 1);
+
+  // Partial credit reveal.
+  socket.fire('game:reveal', {
+    index: 0, total: 1, multiSelect: true, answered: true, correct: false, partial: true,
+    yourIndexes: [0], correctIndexes: [0, 1], correctTexts: ['Jaws', 'E.T.'],
+    correctText: 'Jaws · E.T.', gained: 500, score: 500, streak: 0, rank: 2, playerCount: 3,
+  });
+  check('partial credit gets its own styling',
+    doc.getElementById('screen-result').className.includes('result--partial'),
+    doc.getElementById('screen-result').className);
+  check('partial credit says partly right', /partly right/i.test(text(doc, 'result-title')), text(doc, 'result-title'));
+  check('partial credit lists every correct answer',
+    /Jaws/.test(text(doc, 'result-detail')) && /E\.T\./.test(text(doc, 'result-detail')),
+    text(doc, 'result-detail'));
+  check('partial credit still shows the points', text(doc, 'result-gain') === '+500');
+
+  // Full marks on a multi question.
+  socket.fire('game:reveal', {
+    index: 0, total: 1, multiSelect: true, answered: true, correct: true, partial: false,
+    yourIndexes: [0, 1], correctIndexes: [0, 1], correctTexts: ['Jaws', 'E.T.'],
+    correctText: 'Jaws · E.T.', gained: 1000, score: 1000, streak: 1, rank: 1, playerCount: 3,
+  });
+  check('full marks on a multi question reads as correct',
+    doc.getElementById('screen-result').className.includes('result--right') &&
+    /correct/i.test(text(doc, 'result-title')));
+
+  // A single-answer question must go back to tap-to-submit.
+  socket.fire('game:question', {
+    index: 1, total: 2, prompt: 'One answer only', hasMedia: false, mediaKind: null,
+    optionCount: 3, options: OPTIONS, multiSelect: false, timeLimit: 20, points: 1000, phase: 'reading',
+  });
+  socket.fire('game:answers-open', {
+    options: OPTIONS, deadline: Date.now() + 20000, serverNow: Date.now(), timeLimit: 20,
+  });
+  check('a single-answer question hides the submit button', !visible(doc, 'answer-submit'));
+  check('a single-answer question hides the select-all hint', !visible(doc, 'answer-hint'));
+
+  const before = socket.sent.filter((s) => s.event === 'player:answer').length;
+  [...doc.getElementById('answer-pads').children][2].dispatchEvent(new window.Event('click'));
+  await new Promise((r) => setTimeout(r, 20));
+  const single = socket.sent.filter((s) => s.event === 'player:answer').slice(before);
+  check('a single-answer tap submits immediately',
+    single.length === 1 && JSON.stringify(single[0].payload.indexes) === '[2]', JSON.stringify(single));
+}
+
+// ===========================================================================
 console.log('\n-- player reconnect mid-question --');
 // ===========================================================================
 {
@@ -293,7 +398,7 @@ console.log('\n-- player reconnect mid-question --');
           game: {
             phase: 'answering', index: 0, total: 2, score: 0, title: 'Movies',
             question: { index: 0, total: 2, prompt: 'Which shark movie?', hasMedia: false, mediaKind: null, optionCount: 3, options: OPTIONS, timeLimit: 20, points: 1000 },
-            deadline: Date.now() + 12000, serverNow: Date.now(), yourIndex: 2,
+            deadline: Date.now() + 12000, serverNow: Date.now(), yourIndexes: [2],
           },
         },
       });
@@ -379,7 +484,7 @@ console.log('\n-- host screens --');
 
   // Reveal.
   socket.fire('game:reveal', {
-    index: 0, total: 2, correctIndex: 0, correctText: 'Jaws', tallies: [3, 1, 0],
+    index: 0, total: 2, correctIndexes: [0], correctTexts: ['Jaws'], correctText: 'Jaws', tallies: [3, 1, 0],
     answered: 4, players: 4,
     leaderboard: [
       { id: 'p1', name: 'Sofia', score: 950, streak: 1, connected: true },

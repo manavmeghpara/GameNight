@@ -40,15 +40,22 @@ function buildPads(container, options, opts = {}) {
 }
 
 /**
- * Dim everything except the right answer, optionally showing how many people
- * picked each option and which one this player chose.
+ * Dim everything except the right answer(s), optionally showing how many people
+ * picked each option and which ones this player chose.
+ *
+ * `correct` is an option index or an array of them.
  */
-function revealPads(pads, correctIndex, { tallies = null, chosenIndex = null } = {}) {
+function revealPads(pads, correct, { tallies = null, chosen = [] } = {}) {
+  const right = new Set(Array.isArray(correct) ? correct : [correct]);
+  const picked = new Set(Array.isArray(chosen) ? chosen : [chosen]);
+
   pads.forEach((pad, i) => {
     if (pad.tagName === 'BUTTON') pad.disabled = true;
-    pad.classList.toggle('pad--dim', i !== correctIndex);
-    pad.classList.toggle('pad--right', i === correctIndex);
-    pad.classList.toggle('pad--chosen', i === chosenIndex);
+    pad.classList.toggle('pad--dim', !right.has(i));
+    pad.classList.toggle('pad--right', right.has(i));
+    pad.classList.toggle('pad--chosen', picked.has(i));
+    // A wrong pick stays visible so players can see what they got wrong.
+    pad.classList.toggle('pad--missed', picked.has(i) && !right.has(i));
 
     if (tallies) {
       const tally = document.createElement('span');
@@ -59,11 +66,21 @@ function revealPads(pads, correctIndex, { tallies = null, chosenIndex = null } =
   });
 }
 
-/** Marks the option this player locked in and disables the rest. */
-function lockPads(pads, chosenIndex) {
+/** Marks the option(s) this player locked in and disables the lot. */
+function lockPads(pads, chosen) {
+  const picked = new Set(Array.isArray(chosen) ? chosen : [chosen]);
   pads.forEach((pad, i) => {
     if (pad.tagName === 'BUTTON') pad.disabled = true;
-    pad.classList.toggle('pad--chosen', i === chosenIndex);
-    pad.classList.toggle('pad--dim', i !== chosenIndex);
+    pad.classList.toggle('pad--chosen', picked.has(i));
+    pad.classList.toggle('pad--dim', !picked.has(i));
+  });
+}
+
+/** Shows which options are currently ticked, while still editable. */
+function markSelected(pads, selected) {
+  const picked = new Set(selected);
+  pads.forEach((pad, i) => {
+    pad.classList.toggle('pad--picked', picked.has(i));
+    pad.setAttribute('aria-pressed', String(picked.has(i)));
   });
 }

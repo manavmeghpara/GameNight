@@ -122,7 +122,7 @@ const fullQuiz = {
         { id: '2'.repeat(16), text: 'Alien' },
         { id: '3'.repeat(16), text: 'The Thing' },
       ],
-      correctIndex: 2,
+      correctIndexes: [2],
     },
     {
       id: 'b'.repeat(16),
@@ -137,7 +137,7 @@ const fullQuiz = {
         { id: '4'.repeat(16), text: 'Star Wars' },
         { id: '5'.repeat(16), text: 'Indiana Jones' },
       ],
-      correctIndex: 0,
+      correctIndexes: [0],
     },
   ],
 };
@@ -147,7 +147,8 @@ check('saves a quiz', saved.status === 200, JSON.stringify(saved.body).slice(0, 
 check('valid quiz has no problems', saved.body.problems.length === 0, JSON.stringify(saved.body.problems));
 check('keeps 3 options on q1', saved.body.quiz.questions[0].options.length === 3);
 check('keeps 2 options on q2', saved.body.quiz.questions[1].options.length === 2);
-check('keeps correctIndex', saved.body.quiz.questions[0].correctIndex === 2);
+check('keeps the correct answer', JSON.stringify(saved.body.quiz.questions[0].correctIndexes) === '[2]',
+  JSON.stringify(saved.body.quiz.questions[0].correctIndexes));
 check('keeps clip window', saved.body.quiz.questions[1].clipStart === 12.5 && saved.body.quiz.questions[1].clipEnd === 30);
 
 const reread = await get(`/api/quizzes/${quizId}`);
@@ -165,7 +166,7 @@ const nasty = await send('PUT', `/api/quizzes/${quizId}`, {
         timeLimit: 999,
         points: 999999,
         options: [{ text: 'only one' }],
-        correctIndex: 42,
+        correctIndexes: [42],
       },
     ],
   },
@@ -177,7 +178,8 @@ check('path traversal media is dropped', nq.media === null, JSON.stringify(nq.me
 check('bogus time limit falls back', nq.timeLimit === 20, String(nq.timeLimit));
 check('bogus points fall back', nq.points === 1000, String(nq.points));
 check('option count is padded to the minimum', nq.options.length === 2, String(nq.options.length));
-check('out-of-range correctIndex is clamped', nq.correctIndex === 1, String(nq.correctIndex));
+check('out-of-range correct answer falls back to the first option',
+  JSON.stringify(nq.correctIndexes) === '[0]', JSON.stringify(nq.correctIndexes));
 check('single-option question is flagged', nasty.body.problems.length > 0);
 
 const tooMany = await send('PUT', `/api/quizzes/${quizId}`, {
@@ -187,7 +189,7 @@ const tooMany = await send('PUT', `/api/quizzes/${quizId}`, {
       {
         prompt: 'Pick one',
         options: Array.from({ length: 20 }, (_, i) => ({ text: `Option ${i}` })),
-        correctIndex: 0,
+        correctIndexes: [0],
       },
     ],
   },
@@ -202,7 +204,7 @@ const dupes = await send('PUT', `/api/quizzes/${quizId}`, {
       {
         prompt: 'Which?',
         options: [{ text: 'Jaws' }, { text: 'jaws' }, { text: 'Alien' }],
-        correctIndex: 0,
+        correctIndexes: [0],
       },
     ],
   },

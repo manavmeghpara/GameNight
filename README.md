@@ -129,6 +129,9 @@ For each question you can set:
 - **Answer options** — **2 to 8 of them**. Add and remove freely; each gets its own colour
   and shape that matches exactly what players see on their phones. Click the circle to
   mark the correct one
+- **Multiple correct answers** — tick this and the question becomes "select all that
+  apply". Mark as many correct options as you like; the builder shows what each pick is
+  worth and what a wrong one costs. See [How scoring works](#how-scoring-works)
 
 Everything **autosaves** shortly after you stop typing. **Check quiz** lists anything that
 would stop it being playable — a blank prompt, too few options, a blank correct answer, or
@@ -162,16 +165,39 @@ Other controls:
 
 ## How scoring works
 
+### Single-answer questions
+
 A **wrong or missing answer scores 0** and resets your streak.
 
 A **correct answer** scores between **50% and 100%** of the question's points, depending on
 how fast you were — full points the instant the pads open, decaying to half at the buzzer.
 Speed is what separates two people who both knew the answer.
 
-Consecutive correct answers add a **streak bonus** of **+100 each**, capped at **+500**.
-
 > Example: 1000-point question, answered a quarter of the way through the timer, third
 > correct in a row → `1000 × 0.875 = 875`, plus a 200 streak bonus → **1075**.
+
+### Multi-answer questions
+
+The question's points are **split evenly across its correct options**. With 1000 points and
+2 correct answers, each is worth a **share** of 500.
+
+- Each **correct** option you pick earns its share, scaled by how fast you answered
+- Each **wrong** option you pick costs **one full share**, not scaled
+- A question can **never score below zero**
+
+So picking one right and one wrong always nets **exactly 0**, however fast you were — the
+penalty cancels the credit. Picking two right out of three earns partial credit.
+
+> Example: 1000 points, 4 correct options (share = 250). You pick 3 right and 1 wrong,
+> halfway through the timer:
+> `credit = 3 × 250 × 0.75 = 562.5`, `penalty = 1 × 250 = 250` → **313**.
+
+### The streak bonus
+
+Consecutive correct answers add **+100 each**, capped at **+500**.
+
+On a multi-answer question the streak only advances on **full marks** — every correct
+option and no wrong ones. Partial credit keeps your points but breaks the streak.
 
 ---
 

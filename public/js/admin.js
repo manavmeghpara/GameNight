@@ -73,7 +73,19 @@ function questionProblems(q) {
   if (filled.length < config.minOptions) {
     problems.push(`Needs at least ${config.minOptions} answer options.`);
   }
-  if (!q.options[q.correctIndex]?.text.trim()) problems.push('The correct answer is blank.');
+
+  if (!q.correctIndexes.length) {
+    problems.push('Mark at least one correct answer.');
+  } else if (q.correctIndexes.some((i) => !q.options[i]?.text.trim())) {
+    problems.push(
+      q.correctIndexes.length > 1
+        ? 'One of the correct answers is blank.'
+        : 'The correct answer is blank.',
+    );
+  } else if (q.multiSelect && q.correctIndexes.length === filled.length) {
+    problems.push('Every option is marked correct — add a wrong answer.');
+  }
+
   const seen = new Set();
   for (const o of filled) {
     const key = o.text.trim().toLowerCase();
@@ -358,9 +370,20 @@ function renderQuestionEditor() {
   $('q-prompt').value = q.prompt;
   $('q-time').value = String(q.timeLimit);
   $('q-points').value = String(q.points);
+  $('q-multi').checked = Boolean(q.multiSelect);
   renderMedia(q);
   renderOptions(q);
 }
+
+$('q-multi').addEventListener('change', (e) => {
+  const q = activeQuestion();
+  q.multiSelect = e.target.checked;
+  // Turning it off leaves exactly one correct answer standing.
+  if (!q.multiSelect) q.correctIndexes = [q.correctIndexes[0] ?? 0];
+  renderOptions(q);
+  renderQuestionList();
+  markDirty();
+});
 
 $('q-prompt').addEventListener('input', (e) => {
   const q = activeQuestion();
@@ -386,10 +409,22 @@ function renderOptions(q) {
   const list = $('options-list');
   list.textContent = '';
 
+  const correct = new Set(q.correctIndexes);
+
+  // Spell out what each pick is worth, since the maths is not obvious.
+  if (q.multiSelect) {
+    const share = correct.size ? Math.round(q.points / correct.size) : 0;
+    $('options-hint').textContent = correct.size
+      ? `Tick every correct answer · each is worth ${share} points, each wrong pick costs ${share}`
+      : 'Tick every correct answer';
+  } else {
+    $('options-hint').textContent = 'Click the circle to mark the correct answer';
+  }
+
   q.options.forEach((option, i) => {
     const style = answerStyle(i);
     const row = document.createElement('div');
-    row.className = 'option' + (i === q.correctIndex ? ' option--correct' : '');
+    row.className = 'option' + (correct.has(i) ? ' option--correct' : '');
 
     const glyph = document.createElement('div');
     glyph.className = 'option__glyph';
@@ -422,11 +457,19 @@ function renderOptions(q) {
 
     const mark = document.createElement('button');
     mark.type = 'button';
-    mark.className = 'option__mark';
+    mark.className = 'option__mark' + (q.multiSelect ? ' option__mark--box' : '');
     mark.textContent = '✓';
-    mark.title = 'Mark as the correct answer';
+    mark.title = q.multiSelect
+      ? 'Tick if this answer is correct'
+      : 'Mark as the correct answer';
     mark.addEventListener('click', () => {
-      q.correctIndex = i;
+      if (q.multiSelect) {
+        q.correctIndexes = correct.has(i)
+          ? q.correctIndexes.filter((n) => n !== i)
+          : [...q.correctIndexes, i].sort((a, b) => a - b);
+      } else {
+        q.correctIndexes = [i];
+      }
       renderOptions(q);
       renderQuestionList();
       markDirty();
@@ -441,9 +484,12 @@ function renderOptions(q) {
     del.disabled = q.options.length <= config.minOptions;
     del.addEventListener('click', () => {
       q.options.splice(i, 1);
-      // Keep the correct answer pointing at the same option where possible.
-      if (q.correctIndex === i) q.correctIndex = 0;
-      else if (q.correctIndex > i) q.correctIndex -= 1;
+      // Keep the correct answers pointing at the same options: drop the deleted
+      // one and shift everything after it down.
+      q.correctIndexes = q.correctIndexes
+        .filter((n) => n !== i)
+        .map((n) => (n > i ? n - 1 : n));
+      if (!q.correctIndexes.length) q.correctIndexes = [0];
       renderOptions(q);
       renderQuestionList();
       markDirty();

@@ -261,10 +261,25 @@
   border-radius: 999px;
 }
 
+/* Ticked but not yet submitted (multi-answer questions). */
+.pad--picked {
+  box-shadow: 0 0 0 4px #fff, 0 0 20px rgba(255, 255, 255, 0.3);
+}
+
+.pad--picked .pad__glyph::after {
+  content: ' ✓';
+}
+
 /* Reveal states */
 .pad--dim {
   opacity: 0.25;
   transform: scale(0.97);
+}
+
+/* A wrong option this player picked stays legible, ringed in red. */
+.pad--missed {
+  opacity: 0.75;
+  box-shadow: 0 0 0 3px var(--a1);
 }
 
 .pad--right {
@@ -371,6 +386,26 @@
   color: var(--gold);
 }
 
+.play__hint {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--gold);
+}
+
+#answer-submit {
+  flex: 0 0 auto;
+}
+
+.tag--mode {
+  color: var(--a2);
+  background: rgba(42, 127, 224, 0.15);
+  border-color: rgba(42, 127, 224, 0.45);
+}
+
 /* --- get ready ---------------------------------------------------------- */
 
 .ready__prompt {
@@ -393,6 +428,15 @@
 
 .result--wrong {
   background: radial-gradient(900px 600px at 50% 0%, rgba(232, 67, 79, 0.32), transparent 65%);
+}
+
+/* Partial credit on a multi-answer question: right, but not the whole answer. */
+.result--partial {
+  background: radial-gradient(900px 600px at 50% 0%, rgba(240, 165, 30, 0.32), transparent 65%);
+}
+
+.result--partial .result__mark {
+  background: var(--a3);
 }
 
 .result__mark {

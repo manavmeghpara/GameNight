@@ -466,7 +466,32 @@ select:focus {
 }
 
 .options__hint {
+  margin: 0 0 10px;
   font-size: 0.8rem;
+}
+
+.switch {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: none;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.switch input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--gold);
+  cursor: pointer;
+}
+
+/* Multi-select marks read as checkboxes, single-select as radios. */
+.option__mark--box {
+  border-radius: 6px;
 }
 
 .options__list {

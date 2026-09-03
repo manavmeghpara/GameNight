@@ -105,7 +105,9 @@ socket.on('host:reconnected', () => banner(''));
 // ---------------------------------------------------------------------------
 
 let pads = [];
-let chosenIndex = null;
+let selected = []; // ticked but not yet submitted (multi-answer questions)
+let submitted = false;
+let multiSelect = false;
 let clockOffset = 0;
 let clockTimer = null;
 
@@ -120,7 +122,9 @@ socket.on('game:started', () => {
 socket.on('game:question', (q) => showReady(q));
 
 function showReady(q) {
-  chosenIndex = null;
+  selected = [];
+  submitted = false;
+  multiSelect = Boolean(q.multiSelect);
   pads = [];
   $('ready-progress').textContent = `Question ${q.index + 1} of ${q.total}`;
   $('ready-prompt').textContent = q.prompt;
@@ -139,62 +143,112 @@ function openAnswers(options, deadline, alreadyChosen = null) {
   $('answer-progress').textContent = $('ready-progress').textContent;
   $('answer-prompt').textContent = $('ready-prompt').textContent;
   $('answer-status').textContent = '';
+  $('answer-hint').classList.toggle('hidden', !multiSelect);
+  $('answer-submit').classList.toggle('hidden', !multiSelect);
 
   pads = buildPads($('answer-pads'), options, {
     interactive: true,
-    onPick: (index) => submitAnswer(index),
+    onPick: (index) => (multiSelect ? toggleOption(index) : submitAnswer([index])),
   });
 
-  chosenIndex = alreadyChosen;
-  if (chosenIndex !== null) markLocked(chosenIndex);
+  if (alreadyChosen?.length) {
+    // Reconnecting after already answering.
+    selected = alreadyChosen;
+    submitted = true;
+    markLocked(selected);
+  } else {
+    selected = [];
+    submitted = false;
+    updateSubmitButton();
+  }
 
   startClock(deadline);
   showScreen('screen-answer', SCREENS);
 }
 
-async function submitAnswer(index) {
-  if (chosenIndex !== null) return;
-  chosenIndex = index; // lock immediately so a double tap cannot double-send
-  markLocked(index);
+/** Multi-answer: tick an option on or off until they press Submit. */
+function toggleOption(index) {
+  if (submitted) return;
+  selected = selected.includes(index)
+    ? selected.filter((i) => i !== index)
+    : [...selected, index].sort((a, b) => a - b);
+  markSelected(pads, selected);
+  updateSubmitButton();
+}
 
-  const reply = await ask(socket, 'player:answer', { optionIndex: index });
+function updateSubmitButton() {
+  if (!multiSelect) return;
+  const button = $('answer-submit');
+  button.disabled = selected.length === 0 || submitted;
+  button.textContent = selected.length
+    ? `Submit ${selected.length} answer${selected.length === 1 ? '' : 's'}`
+    : 'Pick your answers';
+}
+
+async function submitAnswer(indexes) {
+  if (submitted || !indexes.length) return;
+  submitted = true; // lock immediately so a double tap cannot double-send
+  selected = indexes;
+  markLocked(indexes);
+
+  const reply = await ask(socket, 'player:answer', { indexes });
   if (!reply.ok) {
     // The server refused it — let them try again if there is still time.
-    chosenIndex = null;
+    submitted = false;
+    selected = [];
     pads.forEach((pad) => {
       pad.disabled = false;
-      pad.classList.remove('pad--chosen', 'pad--dim');
+      pad.classList.remove('pad--chosen', 'pad--dim', 'pad--picked');
     });
+    updateSubmitButton();
     $('answer-status').textContent = reply.error;
   }
 }
 
-function markLocked(index) {
-  lockPads(pads, index);
+function markLocked(indexes) {
+  lockPads(pads, indexes);
+  $('answer-submit').disabled = true;
+  $('answer-submit').textContent = 'Locked in';
   $('answer-status').textContent = 'Locked in — hang tight';
 }
 
+$('answer-submit').addEventListener('click', () => submitAnswer(selected));
+
 socket.on('game:reveal', (r) => {
   stopClock();
-  const right = r.correct;
+  renderResult(r);
+  $('result-rank').textContent = `${r.score} points · ${ordinal(r.rank)} of ${r.playerCount}`;
+  showScreen('screen-result', SCREENS);
+});
 
-  $('screen-result').className = `screen result result--${right ? 'right' : 'wrong'}`;
-  $('result-mark').textContent = right ? '✓' : '✕';
-  $('result-title').textContent = right
+/** Shared by the live reveal and by a reconnect that lands during one. */
+function renderResult(r) {
+  // Three outcomes now: full marks, partial credit, or nothing.
+  const tone = r.correct ? 'right' : r.partial ? 'partial' : 'wrong';
+  $('screen-result').className = `screen result result--${tone}`;
+  $('result-mark').textContent = r.correct ? '✓' : r.partial ? '±' : '✕';
+
+  $('result-title').textContent = r.correct
     ? 'Correct!'
-    : r.answered
-      ? 'Not quite'
-      : "Time's up";
-  $('result-detail').textContent = right
+    : r.partial
+      ? 'Partly right'
+      : r.answered
+        ? 'Not quite'
+        : "Time's up";
+
+  const answerLabel =
+    r.correctTexts?.length > 1
+      ? `The answers were ${r.correctTexts.map((t) => `“${t}”`).join(', ')}`
+      : `The answer was “${r.correctText}”`;
+
+  $('result-detail').textContent = r.correct
     ? r.streak >= 2
       ? `${r.streak} in a row 🔥`
       : ''
-    : `The answer was “${r.correctText}”`;
-  $('result-gain').textContent = r.gained > 0 ? `+${r.gained}` : '';
-  $('result-rank').textContent = `${r.score} points · ${ordinal(r.rank)} of ${r.playerCount}`;
+    : answerLabel;
 
-  showScreen('screen-result', SCREENS);
-});
+  $('result-gain').textContent = r.gained > 0 ? `+${r.gained}` : '';
+}
 
 socket.on('game:scoreboard', (s) => {
   $('board-rank').textContent = ordinal(s.rank);
@@ -230,7 +284,8 @@ socket.on('game:ended', (e) => {
 
 socket.on('game:reset', () => {
   stopClock();
-  chosenIndex = null;
+  selected = [];
+  submitted = false;
   pads = [];
   showScreen('screen-wait', SCREENS);
 });
@@ -244,14 +299,10 @@ function restoreGameScreen(game) {
     case 'answering':
       clockOffset = game.serverNow - Date.now();
       showReady(game.question);
-      openAnswers(game.question.options, game.deadline, game.yourIndex);
+      openAnswers(game.question.options, game.deadline, game.yourIndexes);
       break;
     case 'reveal':
-      $('screen-result').className = `screen result result--${game.correct ? 'right' : 'wrong'}`;
-      $('result-mark').textContent = game.correct ? '✓' : '✕';
-      $('result-title').textContent = game.correct ? 'Correct!' : game.answered ? 'Not quite' : "Time's up";
-      $('result-detail').textContent = game.correct ? '' : `The answer was “${game.correctText}”`;
-      $('result-gain').textContent = game.gained > 0 ? `+${game.gained}` : '';
+      renderResult(game);
       $('result-rank').textContent = `${game.score} points`;
       showScreen('screen-result', SCREENS);
       break;
@@ -282,8 +333,13 @@ function startClock(deadline) {
     $('answer-clock').classList.toggle('play__clock--low', left <= 5);
     if (left <= 0) {
       stopClock();
-      if (chosenIndex === null) {
-        lockPads(pads, -1);
+      if (submitted) return;
+      if (selected.length) {
+        // They ticked options but never pressed Submit — send it rather than
+        // score them zero. The server allows a small grace past the deadline.
+        submitAnswer(selected);
+      } else {
+        lockPads(pads, []);
         $('answer-status').textContent = "Time's up";
       }
     }

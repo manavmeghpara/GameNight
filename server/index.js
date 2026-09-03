@@ -250,14 +250,15 @@ io.on('connection', (socket) => {
     broadcastPlayers(room);
   });
 
-  socket.on('player:answer', ({ optionIndex } = {}, ack) => {
+  socket.on('player:answer', ({ optionIndex, indexes } = {}, ack) => {
     const room = getRoom(socket.data.code);
     if (!room?.game) return ack?.({ ok: false, error: 'No game is running.' });
     const player = room.players.get(socket.data.playerId);
     if (!player || player.socketId !== socket.id) {
       return ack?.({ ok: false, error: 'You are not in this game.' });
     }
-    ack?.(room.game.submitAnswer(player, optionIndex));
+    // `indexes` for a multi-answer question, `optionIndex` for a single one.
+    ack?.(room.game.submitAnswer(player, indexes ?? optionIndex));
   });
 
   socket.on('host:close', (_payload, ack) => {

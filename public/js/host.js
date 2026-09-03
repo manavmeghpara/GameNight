@@ -178,6 +178,9 @@ socket.on('game:question', (q) => {
   $('q-prompt').textContent = q.prompt;
   $('q-points').textContent = q.points === 0 ? 'Just for fun' : `${q.points} pts`;
   $('q-answered').textContent = '';
+  // Never say how many are correct — players can see this screen.
+  $('q-mode').textContent = q.multiSelect ? 'Select all that apply' : '';
+  $('q-mode').classList.toggle('hidden', !q.multiSelect);
 
   // Options stay off screen until answers open, so nobody can read ahead.
   $('q-options').textContent = '';
@@ -216,9 +219,9 @@ socket.on('game:reveal', (r) => {
   if (!pads.length && question) {
     pads = buildPads($('q-options'), question.options, { host: true });
   }
-  revealPads(pads, r.correctIndex, { tallies: r.tallies });
+  revealPads(pads, r.correctIndexes, { tallies: r.tallies });
 
-  $('q-progress').textContent = 'Correct answer';
+  $('q-progress').textContent = r.correctTexts.length > 1 ? 'Correct answers' : 'Correct answer';
   $('q-prompt').textContent = r.correctText;
   $('q-answered').textContent = `${r.answered} of ${r.players} answered`;
   $('advance-btn').textContent = 'Scoreboard';
